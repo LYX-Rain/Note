@@ -527,12 +527,14 @@ int main()
 
 ## Collections
 
+数据结构可以被组装以形成层次结构。原子数据类型，如 int、char、double和枚举类型，在层次结构中占据最低级别。为了表示更复杂的信息，可以将原子类型组合起来形成更大的结构，这些组合统称为*数据结构*
+根据其行为而不是表示形式定义的类型称为*抽象数据类型*，通常缩写为 ADT。抽象数据类型是面向对象编程风格的核心，它鼓励程序员以整体方式思考数据结构。
+
 C++ 标准模板库，容器的底层数据类型由自己决定，所有东西由模板组成
 
 ### The Vector class
 
-Vector 的名字背后有一个故事，它不应被成为 Vector，应该叫做 ArrayList，因为其本质是一个动态数组
-与数组不同的是，它可以调整数组大小
+Vector 的名字背后有一个故事，它不应被成为 Vector，应该叫做 ArrayList，因为其本质是一个动态数组。与数组不同的是，它可以调整数组大小
 vector 中使用对象还是对象指针是需要视情况而定的，使用对象便于访问，使用指针便于扩容（一般情况下，优先使用对象）
 
 ```C++
@@ -581,10 +583,30 @@ push_back 会先在main函数栈帧中创建对象，然后再复制到 vector �
 使用 emplace_back 替代 push_back，emplace_back 函数使用传递给它的参数在分配好的内存中直接构造对象
 
 
-
 ### The Stack class
 
+```C++
+Stack<type> ()
+
+size()
+isEmpty()
+push(value)
+pop()
+peek()
+clear()
+```
+
 ### The Queue class
+
+```C++
+Queue<type> ()
+size()
+isEmpty()
+enqueue(value)
+dequeue()
+peek()
+clear()
+```
 
 ### The Map class
 
@@ -601,6 +623,20 @@ Map implementation
 
 - HashMap: implemented using a special array called a *hash table*.
   - very fast, but keys are stored in unpredictable order
+
+```C++
+Map<key type, value type> ()
+
+size()
+isEmpty()
+put(key, value)
+get(key)
+remove(key)
+containsKey(key)
+clear()
+
+map[key]    //重载运算符
+```
 
 ### The Set class
 
@@ -621,6 +657,26 @@ Looping over a set
 for (type name : collection) {
     statements;
 }
+```
+
+```C++
+Set<type> ()
+
+size()
+isEmpty()
+add(value)
+remove(value)
+constains(value)
+clear()
+isSubsetOf(set)
+first()
+
+s1+s2   // 返回二者的合集
+s1*s2   // 返回二者的交集
+s1-s2   // 去除s1中s2也有的部分
+s1+=s2  // 直接修改s1
+s1-=s2
+s1*=s2
 ```
 
 ## Designing Classes
@@ -1324,6 +1380,11 @@ int main()
 
 ## Dynamic Memory Management
 
+目前为止已经看到了两种为变量分配内存的方式。
+静态分配：声明全局变量时，编译器会将其分配在整个程序中持续存在的内存空间，变量被分配到的内存位置在程序的整个生命周期中都不会改变
+自动分配（automatic allocation）：在函数中声明局部变量时，该变量会在堆栈中分配。调用函数时会为变量分配内存，函数返回时会释放该内存
+动态分配：在程序运行时获取新内存
+
 在程序启动后，操作系统会将整个程序加载到内存中，并分配一堆物理 ram，以便程序的运行
 stack 和 heap 是 ram 中实际存在的两个区域，用于存储运行时的数据
 stack 通常是一个预定大小的内存区域（通常为 2M byte 左右）
@@ -1367,6 +1428,18 @@ new 关键字实际上调用了 malloc 函数（memory allocate 的缩写），�
 当调用 malloc 请求堆内存时，它会扫描空闲列表，找到对应大小的空闲内存，并返回一个指针，同时记录一些东西
 
 在 stack 上分配的内存或存储的变量，由于它们在内存中挨得很近，因此可以放到 CPU cache line 上，从而实现更高的 cache 命中率，而在 heap 上的内存可能是 cache miss
+
+### Linked list
+
+```C++
+#include <iostream>
+#include <string>
+
+struct LinkNode {
+    string name;
+    LinkNode* next;
+}
+```
 
 ## Efficiency and Representation
 

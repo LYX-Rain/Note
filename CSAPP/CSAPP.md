@@ -2022,3 +2022,10 @@ extern FILE *stderr;  // Standard error (descriptor 2)
 ## Concurrent Programming（并发编程）
 
 如果逻辑控制流在时间上重叠，那么它们就是*并发的*（concurrent）
+
+经典的并发问题：
+
+竞争（Races）：结果的好坏取决于任意的调度策略
+死锁（Deadlock）：有多个流等待永远不会发生的事件
+  在信号处理程序中使用 printf
+活锁（Livelock）、饥饿（Starvation）、公平（Fairness）：一直没有得到调度
