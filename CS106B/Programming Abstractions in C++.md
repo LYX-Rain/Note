@@ -527,6 +527,42 @@ int main()
 }
 ```
 
+s.append(str)
+s.compare(str)
+s.erase(index, length) delete text from s string starting at given index
+s.find(str)
+s.rfind(str)
+s.insert(index, str)
+s.length() or s.size()
+s.replace(index, len, str)
+s.substr(start, length)
+s.substr(start)
+
+```C++
+string name = "Donald Knuth";
+if (name.find("xx") != string::npos) {
+    name.erase(7, 5)    // "Donald"
+}
+```
+
+#include "strlib.h"
+
+endsWith(str, suffix)
+startWith(str, prefix)
+
+integerToString(int)
+realToString(double)
+stringToInteger(str)
+stringToReal(str)
+
+equalsIgnoreCase(s1, s2) true if s1 and s2 have same chars, ignoring casing
+
+toLowerCase(str)
+toUpperCase(str)
+
+trim(str) 去除前后空格
+
+
 ## Streams
 
 ## Collections
