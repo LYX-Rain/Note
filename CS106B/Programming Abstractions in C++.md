@@ -563,7 +563,76 @@ toUpperCase(str)
 trim(str) 去除前后空格
 
 
+String user input
+
+cin reads string input, but only a word at a time
+
+```C++
+cout << "Type your name: ";
+String name;
+cin >> name;
+cout << "Hello, " << name << endl;
+```
+
+C++ stanard library **getLine** function reads an entire line:
+
+```C++
+string name;
+cout << "Type your name: ";
+getLine(cin, name);
+cout << "Hello, " << name << endl;
+```
+
 ## Streams
+
+> #include <fstream>
+
+ifstream, ofstream classes for input/output files
+    - inheritance hierarchy, based on parents named istream, ostream
+cin is an ifstream; cout is an ofstream
+
+f.clear()
+f.close()
+f.eof()
+f.fail()
+f.get()
+f.open("filename")
+f.open(s.c_str())   may need to write .c_str() if a C++ string is passed
+f. unget(ch)
+
+Common pattern: open a file; read each line; close is
+
+```C++
+#include <fstream>
+
+ifstream input;
+input.open("poem.txt");
+if (input.fail()) {
+        cout << "error" << endl;
+} else {
+    string line;
+    while (getline(input, line)) {
+        cout << line << endl;
+    }
+    input.close();
+}
+```
+
+Operator >>
+
+流提取运算符
+Reads/converts next whitespace-separated token of input
+- if unsuccessful, set stream into fail state, and returns a "falsey" value
+
+```C++
+ifstream input;
+input.open("data.txt");
+string word;
+input >> word;
+int age;
+input >> age;
+
+```
 
 ## Collections
 
