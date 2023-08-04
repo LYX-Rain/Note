@@ -105,6 +105,56 @@ int main()
 namespace 只在限定的作用域下有效，使用的时候应尽量限制在小的作用域内，而不是顶层文件上
 C++ 标准库中的所有东西都位于 std 名称空间内
 
+:: （解析符）resolver
+<Class Name>::<function name>   
+::<function name>   global
+
+声明（Declaration） and 定义（Definition）
+
+- A .cpp file is a compile unit 每个.cpp文件都是一个编译单元
+- Only declarations are allowed to be in .h 在.h头文件中，只允许声明，例如：
+    - extern variables
+    - function prototypes
+    - class/struct declaration
+这是为了避免当多个.cpp include 同一个 .h 时，链接器（linker）遇到重复定义问题
+
+标准头文件结构（Standard header file structure）
+
+```C++
+#ifndef HEADER_FLAG
+#define HEADER_FLAG
+// Type declaration here...
+#endif // HEADER_FLAG
+```
+
+当两个头文件相互引用时，使用 `#ifndef` 和 `#endif` 可以使声明只生效一次，避免重复声明
+也可以避免一个 .cpp 文件 include 同个 .h 多次（.h嵌套）而出现该 .h 文件中内容被声明多次
+
+```C++
+// a.h
+#ifndef _A_H
+#define _A_H
+
+extern int global;
+class A {};
+
+#endif
+
+// a.cpp
+#include "a.h"
+
+class A {
+
+}
+
+```
+
+Tips for Header
+
+一个头文件只放一个类的声明（One class declaration per header file）
+对应的源代码文件用相同的文件名，不同的后缀
+头文件使用标准头文件结构
+
 #### Function prototypes
 
 Computation in a C++ program is carried out in the context of ***functions***. A function is a named section of code that performs a specific operation. The **PowersOfTwo** program contains two functions—**main** and **raiseToPower**—each of which is described in more detail in one of the sections that follow. Although the definitions of these functions appear toward the end of the file, the **owersOfTwo** program provides a concise description of the **raiseToPower** function just after the library inclusions. This concise form is called a ***prototype*** and makes it possible to make calls to that function before its actual definition appears.
