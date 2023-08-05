@@ -180,6 +180,28 @@ The first line of the main function in the PowersOfTwo program is an example of 
 Variables declarations
 
 In C++, you must ***declare*** each variable before you use it. The primary function of declaring a variable is to make an association between the ***name*** of the variable and the ***type*** of value that variable contains. The placement of the declaration in a program also determines the ***scope*** of the variable, which is the region in which that variable is accessible.
+C++ 中在使用任何变量前必须先声明它，声明变量的主要功能是在变量的名称和变量的值的类型之间建立联系。声明在程序中的位置也决定了变量的作用范围（域），即可访问变量的区域
+
+总共有3种变量：Fields（字段、成员变量）、parameters（函数参数）、local variable（局部变量）
+成员变量定义在构造函数和方法的外面，成员变量的生命周期和对象一致，它维护着对象的当前状态
+成员变量拥有类的范围（scope），它可以在整个类里面使用
+所有成员函数都有一个隐藏参数`this`，它的类型是对应类的对象的指针
+`this` is a hidden parameter for all member functions, with the type of the class
+
+```C++
+void Point::print()
+// can be regarded as
+void Point::print(Point *p)
+```
+
+调用函数前必须先指定一个变量
+
+Point a;
+a.print();
+可以看成：
+Point::print(&a);
+
+this: pointer to the caller
 
 ### Data type
 
@@ -457,6 +479,37 @@ int main()
 ```
 
 ## Functions and Libraries
+
+### lnline function 内联函数
+
+调用内联函数不会像其他函数一样在栈中生成新的栈帧，而是像宏一样，将函数代码嵌入到调用它的地方，编译器会保证其函数的独立性（作用域、局部变量）
+最终的可执行文件中是没有内联函数的
+
+```C++
+inline int f(int i) {
+    return i*2;
+}
+
+main() {
+    int a = 4;
+    int b = f(a);
+}
+ |
+ |
+ v
+main() {
+    int a = 4;
+    int b = a + a;
+}
+
+```
+
+将内联函数的定义放在 .h 文件中，当需要使用时 include 它
+
+调用内联函数时，函数体会被插入到调用的地方，程序会变长，它会牺牲代码的空间，但是会减低调用函数的额外的开销（overhead）
+并且这种方式优于 C 语言的宏，宏不能做类型检查，inline会由编译器做类型检查
+当inline函数过于巨大，编译器会拒绝将其作为inline函数插入调用位置
+成员函数如果在类的声明时就给出函数体，它默认就是 inline 函数，因此在声明时就给出函数体的set和get函数，在运行效率上没有任何损失
 
 ### lambda
 
@@ -856,9 +909,11 @@ extern 关键字会使 linker 在其他的编译单元里寻找其修饰的变�
 - 如果修饰方法，称为静态方法，静态方法可以在没有类实例的情况下被调用，并且在静态方法不能访问非静态变量（没有 this 指针）
   - 每一个非静态方法都会自动获得当前类的实例作为参数（this）
 
-### Constructor
+### Constructor 构造器（函数）
 
 constructor is a special method, which run every time instance object
+
+构造函数的名字与类名一致，并且没有任何返回类型（不能手动添加，函数内不能 `return`）。构造函数会在对象被创建时自动被调用
 
 如果不写构造函数，编译器会提供一个默认的构造函数，但它不做任何事
 Java 会帮我们初始化参数（0），但 C++ 不会，必须手动初始化所有内存空间。
@@ -875,9 +930,11 @@ public:
 }
 ```
 
-### Destructor
+在进入一个域（scope）时，编译器会分配该域内所有变量的空间，但是构造函数的调用要到运行到对象定义那行时才会发生
 
-当销毁一个对象时，会调用 destructor 方法
+### Destructor 析构函数
+
+当销毁一个对象时，会调用析构函数，析构函数名字是在类名前加一个 tilde（~）。析构函数同样没有返回类型，此外还不能有参数
 构造函数通常用于初始化类的成员变量，类似地，当对象即将结束生命周期时，destructor 其所使用的内存
 析构函数同时应用于分配到栈和堆的对象，当你使用new给对象分配的存储空间，需要调用delete运算符进行释放
 
@@ -1095,7 +1152,7 @@ public:
 ```
 
 初始化列表与在构造函数内初始化参数在功能上有一个区别：
-在使用类的情况下，对象会被创建两次
+使用构造函数进行初始化时，当成员变量是使用某个类的情况下，该成员变量的对象会被创建两次
 
 ```C++
 class Entity
@@ -1118,6 +1175,7 @@ m_Name 对象会被构造两次，一次是使用默认构造函数，然后是�
 > m_Name = std::string("Unknown");
 
 创建了两个字符串，一个被直接丢弃
+因此推荐使用初始化列表初始化成员变量
 
 ### 创建并初始化对象
 
@@ -1299,6 +1357,10 @@ int main()
 ```
 
 e 是在栈上分配的，当 e 被自动删除时，会调用其析构函数，会 delete 这个被包装的 entity 指针
+
+delete
+
+
 
 ### 智能指针
 
