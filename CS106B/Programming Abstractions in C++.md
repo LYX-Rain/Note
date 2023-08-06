@@ -494,9 +494,9 @@ main() {
     int a = 4;
     int b = f(a);
 }
- |
- |
- v
+  |
+  |
+  v
 main() {
     int a = 4;
     int b = a + a;
@@ -615,8 +615,8 @@ int main()
 
 传递字符串参数时应使用引用传递
 
-字符串字面量是在两个双引号之间的一串字符，它是一个 const char 数组，长度为字符数+1（因为字符串的最后有一个额外的字符 null）
-字符串字面量永远保存在内存的只读区域内，如果要通过字符数组的方式修改它，它会复制一个新的字符串，修改后重新复制给该变量
+字符串`字面量`是在两个双引号之间的一串字符，它是一个 `const char` 数组，长度为字符数+1（因为字符串的最后有一个额外的字符 null）
+字符串字面量永远保存在内存的只读区域内（代码段），如果要通过字符数组的方式修改它，它会复制一个新的字符串，修改后重新复制给该变量
 当需要修改字符串中的某个字符时，应将其定义为字符数组，而不是指针
 
 ```C++
@@ -626,6 +626,7 @@ int main()
 {
     const char* name = "Rain";
     char name1[5] = "Rain";
+    name1[2] = 'x';
     strlen(name)    //5
 }
 ```
@@ -968,6 +969,7 @@ public:
 虚函数允许在子类中重写（override）父类的方法
 虚函数引入动态分配，通过VTable（虚函数表）来实现此编译
 VTable 包含基类中所有虚函数的映射，以便能在运行时映射到其重写的函数
+每个对象内存开始的地方都有一个指针指向该类的VTable
 如果要 override 函数，必须要在基类中将函数标记为虚函数
 C++ 11 中引入 override 关键字用于标记 override 的函数，显式地告诉编译器去寻找基类的虚函数，但这不是必须的，仅为增加代码的可读性和便于检查错误
 
@@ -1003,8 +1005,13 @@ int main()
 }
 ```
 
-有两个运行时间损耗与虚函数有关，首先需要额外的内存存储 VTable，其中包含实际基类中指向虚函数表的成员指针
-每次调用虚函数需要遍历 VTable 以查看其实际指向的函数 
+有两个运行时间损耗与虚函数有关：
+- 需要额外的内存存储 VTable，其中包含实际基类中指向虚函数表的成员指针
+- 每次调用虚函数需要遍历 VTable 以查看其实际指向的函数 
+
+Virtual destructor
+
+当父类指针指向子类对象时，在要 delete 的时候，需要调用子类的析构函数，因此要通过`virtual`使得调用析构函数时能够动态绑定调用到子类的析构函数
 
 ### Pure Virtual Function
 
@@ -1181,7 +1188,7 @@ m_Name 对象会被构造两次，一次是使用默认构造函数，然后是�
 
 内存主要分为两部分：stack 栈和 heap 堆，在创建对象时要选择对象存放的位置
 栈上的对象有一个自动的生命周期，由它声明的地方的作用域决定，只要变量超出作用域，就意味着内存被释放了，因为当作用域结束时，栈会弹出，作用域里的东西会被释放
-堆中的对象一旦创建就会一直存在，直到手动释放
+堆中的对象一旦创建就会一直存在，直到手动释放（delete）
 
 ```C++
 #include <iostream>
@@ -1453,7 +1460,7 @@ C++ 中对象的深拷贝通过拷贝构造函数实现，拷贝构造函数是�
 拷贝构造函数名与类名相同，但接收的参数是（const 类名& other）
 C++ 提供的默认的拷贝构造函数是浅拷贝的方式，要进行深拷贝需要重写该函数并手动分配内存
 
-使用函数传递参数时应尽量使用 const+引用传递，避免复制
+使用函数传递参数时应尽量使用 `const`+`&`传递，避免复制
 
 ### 箭头运算符
 
@@ -1512,6 +1519,15 @@ int main()
     entity->Print();
 }
 ```
+
+### Upcast
+
+向上造型 conversion
+Public inheritance should imply substitution
+
+如果B 是 A 的子类，那么B的对象可以被当作 A 的对象来看待和使用，因为其内部的数据结构一样，在内存中的排布一样（子类增加的部分在最后）
+
+downcast：把父类当子类看，有风险
 
 ## Recurision
 
@@ -1661,6 +1677,73 @@ struct LinkNode {
     LinkNode* next;
 }
 ```
+
+### Freeing memory
+
+### The uses of const
+
+declares a variable to have a constant value，声明一个变量为常量，只可赋值一次
+const 对于C++来说仍然是变量，而不是常数，
+它要在内存中分配地址，而常数只是在编译过程中记录在内存表中的一个数。
+它遵循作用域规则（scope rules）
+
+const 的值必须要初始化，除非还用了 `extern` 修饰（定义在某处的全局变量，同时这个全局变量是 `const`）
+const 的不可修改由编译器保证
+编译时刻知道值的 `const` 可以用来定义数组长度
+
+Pointers and const
+
+```C++
+char * const q = "abc"; // q is const
+*q = 'c';               // OK
+q++;                    // error
+const char *p = "ABCD"; // (*p) is a const char
+p++;                    // OK
+*p = 'b';               // error
+```
+
+q 指针本身是 `const`，但其所指的内存不是
+不能通过 p 修改其所指的内存单元（不是说内存单元是 `const`），但 p 本身可以修改
+区别的标记是在 `*` 的前后，在前，对象是 `const`，在后，指针是 `const`
+
+```C++
+int i;
+const int ci = 3;
+
+int* ip;
+ip = &i;
+ip = &ci    // Error
+*ip = 54;   // always legal since ip points to int
+
+const int* cip;
+cip = &i;
+cip = &ci;
+*cip = 54;  // never legal since cip points to const int
+```
+
+`const`修饰成员方法，意味着该方法不能修改成员变量（实际上是对隐藏变量 `this`加上 `const`）
+
+```C++
+int Date::get_day() const {
+    day++;          // Error modifies data
+    set_day(12);    // Error calls non-const member
+    return dat;     // ok
+}
+```
+
+```C++
+class A {
+public:
+    void f() {}
+    void f() const {}
+}
+```
+
+两个 f 函数构成overload，其参数表不同，分别是：
+void f(A* this)
+void f(const A* this)
+
+如果成员变量是 `const`的，必须在使用初始化列表对其进行初始化，并且不能将其作为数组的size
 
 ## Efficiency and Representation
 
