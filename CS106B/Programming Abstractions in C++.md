@@ -478,6 +478,14 @@ int main()
 }
 ```
 
+### static
+
+static local variables: Persistent storage
+static member variables: shared by all instances
+static member function: shared by all instances, can only access static member variables
+
+static 的局部对象，在第一次进函数时初始化
+
 ## Functions and Libraries
 
 ### lnline function 内联函数
@@ -932,6 +940,8 @@ public:
 ```
 
 在进入一个域（scope）时，编译器会分配该域内所有变量的空间，但是构造函数的调用要到运行到对象定义那行时才会发生
+
+全局变量的构造函数的执行在 `main` 函数之前，析构在 `main` 结束时，或手动调用 `exit()`
 
 ### Destructor 析构函数
 
