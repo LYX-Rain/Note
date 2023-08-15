@@ -455,6 +455,12 @@ int main()
 Java 中实现打印对象是通过重写对象的 toString() 方法，print 函数会直接到用对象的 toString() 方法
 == 符号也可以通过重载来实现判断对象是否相等（Java中通过重写类的 equals 方法实现）
 
+成员/非成员 运算符重载
+单步的应该做成成员函数
+= () [] -> ->* 必须是成员函数
+赋值操作应该是成员函数
+其他二元运算符做成非成员函数
+
 ### Statements
 
 ### macro
@@ -478,13 +484,6 @@ int main()
 }
 ```
 
-### static
-
-static local variables: Persistent storage
-static member variables: shared by all instances
-static member function: shared by all instances, can only access static member variables
-
-static 的局部对象，在第一次进函数时初始化
 
 ## Functions and Libraries
 
@@ -1540,6 +1539,30 @@ Public inheritance should imply substitution
 如果B 是 A 的子类，那么B的对象可以被当作 A 的对象来看待和使用，因为其内部的数据结构一样，在内存中的排布一样（子类增加的部分在最后）
 
 downcast：把父类当子类看，有风险
+
+### static
+
+static means
+- Hidden: 隐藏
+- Persistent: 持久
+
+static local variables: Persistent storage
+static member variables: shared by all instances
+static member function: shared by all instances, can only access static member variables
+
+static 的局部对象，在第一次进函数时初始化
+
+静态成员变量
+static member variables
+- global to all class member function
+- initialized once, at file scope
+- provide a place for this variable and init it in .cpp
+- No 'static' in .cpp
+
+在该类的所有对象中都存在，可以直接使用，只有一个值，对所有对象保持一致
+
+静态成员函数
+静态成员函数只能访问静态成员变量，因为静态的成员函数没有 `this` 隐藏变量，它和对象无关，不能访问对象内的东西
 
 ## Recurision
 
