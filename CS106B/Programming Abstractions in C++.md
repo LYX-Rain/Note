@@ -260,9 +260,22 @@ enum Coin {
 
 #### Compound types
 
+类型转换（type conversions）
+Built-in conversions
+- Primitive
+char -> short -> int -> float -> double
+                 int -> long
+Implicit(for any type T)
+T -> T&    T& -> T   T* -> void*
+T[] -> T*    T* -> T[]   T -> const T
+
+User-defined T -> C
+if C(T) is a valid constructor call for c，C 类有参数为 T 的构造函数
+if operator C() is defined for T，T类定义了一个 operator C()
+
 #### keyword
 
-const
+##### const
 
 const 称之为伪关键字，因为它不改变生成的代码。
 有点像类和结构体的可见性，它是一个机制，对开发人员写代码强制特定的规则
