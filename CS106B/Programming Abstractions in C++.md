@@ -67,6 +67,8 @@ Increasingly, professional C++ programmers specify the namespace explicitly by a
 
 > std::cout << "hello, world" << std::endl;
 
+#### namespace
+
 Why don't using namespace std
 不同库对同一类、方法有不同的实现，不使用 namespace 可以很方便的看出哪些函数或类来自于 std 标准库
 
@@ -109,7 +111,7 @@ C++ 标准库中的所有东西都位于 std 名称空间内
 <Class Name>::<function name>   
 ::<function name>   global
 
-声明（Declaration） and 定义（Definition）
+#### 声明（Declaration） and 定义（Definition）
 
 - A .cpp file is a compile unit 每个.cpp文件都是一个编译单元
 - Only declarations are allowed to be in .h 在.h头文件中，只允许声明，例如：
@@ -531,6 +533,58 @@ main() {
 当inline函数过于巨大，编译器会拒绝将其作为inline函数插入调用位置
 成员函数如果在类的声明时就给出函数体，它默认就是 inline 函数，因此在声明时就给出函数体的set和get函数，在运行效率上没有任何损失
 
+### Function pointer 函数指针
+
+raw function pointer（原始函数指针）来自 C 语言
+函数指针是将一个函数赋值给一个变量的方法（也可以将函数作为参数传递给其他函数）
+auto 关键字对于函数指针非常有用
+
+```C++
+void Print(int a)
+{
+    std::cout << "Hello" << a << endl;
+}
+
+int main()
+{
+    auto function = Print;  // 去掉 () 后就不是在调用这个函数，而是在获取函数指针，就像带了取地址符号&
+    void(*function)(int)        // auto 的实际类型是 void(*)()，func只是个名字
+    function = Print;               // 可以其他变量一样赋值
+    function(3);                // call Print function
+
+    typedef void(*PrintFunction)(int); // 建议通过 typedef 或 using 来使用函数指针
+    PrintFunction function = Print;
+    Print(3);                // () means call function 
+}
+```
+
+函数只是 CPU 指令，当编译完成后，它就在二进制文件的某个地方。当函数被调用时，检索要执行的指令的位置（这里没用使用 & 是因为这里有一个隐式转换）
+
+```C++
+#include <iostream>
+#include <vector>
+
+void PrintValue(int value)
+{
+    std::cout << "Value: " << value << std::endl;
+}
+
+void ForEach(const std::vector<int>& values, void(*func)(int))
+{
+    for (int value : values) {
+        func(value);
+    }
+}
+
+int main()
+{
+    std::vector<int> values = {1, 5, 4, 2, 3};
+    ForEach(values, PrintValue);        // 对 vector 中的每一个元素执行 PrintValue 函数
+}
+```
+
+对于只做一些简单步骤，不需要使用一个专门的额外的函数，可以使用 `lambda`
+
 ### lambda
 
 lambda 本质上就是一个普通函数，只是它不像普通函数一样声明，它在代码的过程中生成，用完即弃
@@ -538,7 +592,11 @@ lambda 是定义匿名函数的一种方式
 只要有一个函数指针，就可以在使用 lambda
 
 ```C++
-void ForEach(const std::vector<int>& values, void(*func)(int))
+#include <iostream>
+#include <vector>
+#include <functional>   // 需要包含此头文件 
+
+void ForEach(const std::vector<int>& values, const std::function<void(int)>& func) // 传入参数的类型为 std::function
 {
     for (int value : values)
         func(value);
@@ -548,11 +606,22 @@ int main()
 {
     std::vector<int> values = {1, 4, 2, 5, 3};
     auto lambda = [](int value) { std::cout << value << std::endl; };
-    ForEach(values, [](int value) { std::cout << value << std::endl; });
+    ForEach(values, lambda);
 }
 ```
 
-多类型返回值
+lambda中的 `[]` 叫做捕获方式，也就是如何传入传出参数。
+非捕获lambda可以隐式转换为函数指针，而有捕获lambda不可以。
+
+在algorithm头文件中的 std::find_if 函数可以用来在某种迭代器中找到值，它会返回满足条件的第一个元素的迭代器
+
+```C++
+std::vector<int> values = {1, 4, 2, 5, 3};
+auto it = std::find_if(values.begin(), values.end(), [](int value) { return value > 3; });
+std::cout << *it << std::endl; // 5
+```
+
+### 多类型返回值
 
 一种做法是在调用函数前创建对应变量的指针作为返回数据的地址，并引用传递给函数
 在main 栈帧中预先分配了内存和地址
@@ -577,10 +646,9 @@ int main()
 }
 ```
 
-Library
+### Library
 
-导入头文件使用引号还是尖括号实际上没有区别
-引号会见检查相对路径，再去检查编译器的 include 路径
+导入头文件使用引号还是尖括号实际上没有区别，引号会见检查相对路径，再去检查编译器的 include 路径
 如果这个源文件在项目文件夹中（是自己写的代码），使用引号。如果它是一个完全的外部依赖，则使用尖括号，表示来源于外部
 
 在 C++ 中应保留本地库，而不是依赖于包管理器
@@ -592,10 +660,14 @@ Library
 include 目录下是一堆头文件，通过它就可以使用预构建的二进制文件中的函数的声明
 lib 目录下是预构建的二进制文件，通常有两部分：动态库（dynamic library）和静态库（static library），从而可以选择是静态链接还是动态链接
 静态链接会将这个库放到生成的可执行文件中（exe），而动态库是在运行时被链接的(dll)，主要区别是库文件是否被编译到（或链接到）exe文件中
-静态链接是在编译时发生的，会更快，因为编译器或链接器知道实际进入应用程序的代码，因此可以进行优化
-动态链接发生在运行时，只有真正启动可执行文件时，动态链接库才会被加载到内存中，所以它实际上不是可执行文件的一部分
+
+- 静态链接是在编译时发生的，会更快，因为编译器或链接器知道实际进入应用程序的代码，因此可以进行优化
+- 动态链接发生在运行时，只有真正启动可执行文件时，动态链接库才会被加载到内存中，所以它实际上不是可执行文件的一部分
+
 在 windows 启用一个程序时可能会弹出错误消息：需要 xxx.dll
 使用动态链接需要保证在一个可访问的地方（搜索路径上）有对应的 dll 文件
+
+通常动态链接库（xxx.dll）都会有一个相应的 `xxxdll.lib` 库，这个库基本上是一堆指向dll文件的指针，这样就不用在运行是去检索所有东西的位置，同时编译这两个文件是非常重要的
 
 ## String
 
@@ -758,6 +830,48 @@ input >> age;
 
 ```
 
+C++ 系统库中预先定义了4种流
+- cin
+  - standard input
+- cout
+  - standard output
+- cerr
+  - unbuffered error(debugging) output
+- clog
+  - buffered error(debugging) output
+
+```C++
+#include <iostream>
+int i;
+float f;
+char c;
+char buffer[80];
+
+// Read the next character
+cin >> c;
+
+// Read an integer
+cin >> i;   //skips whitespace
+
+//Read a float and a string separated by whitespace
+cin >> f >> buffer;
+```
+
+istream >> lvalue
+istream 已经做好了对这些类型的提取
+
+| expression type | output format                 | C I/O |
+| --------------- | ----------------------------- | ----- |
+| char            | character                     | %c    |
+| shout, int      | integer                       | %d    |
+| long            | long decimal integer          | %ld   |
+| float           | floating point                | %g    |
+| double          | double precision floation pt. | %lg   |
+| long double     | long double                   | %Lg   |
+| char*           | string                        | %s    |
+| void*           | pointer                       | %p    |
+
+
 ## Collections
 
 数据结构可以被组装以形成层次结构。原子数据类型，如 int、char、double和枚举类型，在层次结构中占据最低级别。为了表示更复杂的信息，可以将原子类型组合起来形成更大的结构，这些组合统称为*数据结构*
@@ -765,8 +879,56 @@ input >> age;
 
 C++ 标准模板库，容器的底层数据类型由自己决定，所有东西由模板组成
 
+### array
+
+In C++, an ***array*** is a low-level collection of individual data values with two distinguishing characteristics:
+
+1. *An array is ordered*.
+2. *An array is homogeneous*.
+
+使用 new 关键字创建的数组会分配在堆内存中，需要手动释放。与直接创建的区别在于生命周期不同。
+如果需要返回某个数组，则应使用 new 关键字创建它，并通过引用传递内存地址。
+
+```C++
+int main()
+{
+    int example[5];             // create on stack
+    int* another = new int[5];  // create on heap, need destroy by hand
+    delete[] another;
+}
+```
+
+C++ 11 中引入了标准数组（standard array）`std::array` 用于替代 C 中的数组，它与原始数组语言风格一致，并且同样存储在栈上
+
+```C++
+#include <array>
+
+int main()
+{
+    std::array<int, 5> data;
+    data[0] = 2;
+    data.size(); // 5
+    data.begin();   // 迭代器
+    for (auto item : data) {    // for each loop
+        cout << item;
+    }
+    std::sort(data.begin(), data.end());
+
+    // old C style
+    int dataOld[5];
+    dataOld[0] = 0;
+}
+
+```
+
+`std::array` 类最大的优势是会维护数组的大小，此外还可以将它作为一个迭代器（有 begin、end），可以使用 foreach 循环遍历，由于它支持迭代器，所以可以使用大量的 STL（标准模板库）算法
+它实际并不存储 `size` 大小，`size` 是你给它的一个模板参数，这意味着 `size()` 函数就是直接返回 5（通过预编译写在代码段里），而不是返回存储在某处的 `size` 变量
+它在 debug 模式下（设定一个特定的宏 `ITERATOR_DEBUG_LEVEL`）会做边界检查，在 release 下实际性能和数组差不多
+`std::array` 是存储在栈中的
+
 ### The Vector class
 
+与 `std:array` 不同，`std::vector` 底层数据存储在堆上
 Vector 的名字背后有一个故事，它不应被成为 Vector，应该叫做 ArrayList，因为其本质是一个动态数组。与数组不同的是，它可以调整数组大小
 vector 中使用对象还是对象指针是需要视情况而定的，使用对象便于访问，使用指针便于扩容（一般情况下，优先使用对象）
 
@@ -1596,57 +1758,9 @@ The definition of an operation in terms of itself.
 
 ### Pointers
 
-#### function pointer
-
-raw function pointer（原始函数指针）来自 C 语言
-函数指针是将一个函数赋值给一个变量的方法（也可以将函数作为参数传递给其他函数）
-auto 关键字对于函数指针非常有用
-
-```C++
-void Print(int a)
-{
-    std::cout << "Hello" << a << endl;
-}
-
-int main()
-{
-    typedef void(*PrintFunction)(int); // 通常会取个别名
-    PrintFunction function = Print;
-
-    Print(3);                // () means call function 
-    auto function = Print;  // just name means get function pointer
-    void(*func)(int)           // 实际的类型
-    func = Print;
-    
-    function(3);             // call Print function
-}
-```
-
-函数只是 CPU 指令，当编译完成后，它就在二进制文件的某个地方
-当函数被调用时，检索要执行的指令的位置
 
 ### Arrays
 
-In C++, an ***array*** is a low-level collection of individual data values with two distinguishing characteristics:
-
-1. *An array is ordered*.
-2. *An array is homogeneous*.
-
-使用 new 关键字创建的数组会分配在堆内存中，需要手动释放。与直接创建的区别在于生命周期不同。
-如果需要返回某个数组，则应使用 new 关键字创建它，并通过引用传递内存地址。
-
-```C++
-int main()
-{
-    int example[5];             // create on stack
-    int* another = new int[5];  // create on heap, need destroy by hand
-    delete[] another;
-}
-```
-
-C++ 11 中引入了标准数组（standard array），相较于原始数组具有很多优点（边界检测和跟踪数组大小）并且语言风格与原始数组一致，并且同样存储在栈上
-此外还可以将它作为一个迭代器（有 begin、end），可以使用 foreach 循环遍历，由于它支持迭代器，所以可以使用大量的 STL（标准模板库）算法
-在 Debug 模式下会做边界检测，在 release 下实际性能和数组差不多，并且数组的大小是通过预编译在代码段里的，运行时的栈是没有对应变量的
 
 ```C++
 #include <array>
@@ -1664,6 +1778,8 @@ int main()
 ```
 
 ## Dynamic Memory Management
+
+C++ 的内存模型较为复杂，有3个地方可以放对象，有3种手段管理对象
 
 目前为止已经看到了两种为变量分配内存的方式。
 静态分配：声明全局变量时，编译器会将其分配在整个程序中持续存在的内存空间，变量被分配到的内存位置在程序的整个生命周期中都不会改变
@@ -1882,8 +1998,49 @@ int main()
 {
     // 启动一个线程执行传入的函数
     std::thread worker(DoWork)      // function pointer
-    // 程序会继续执行，直到我们等待它推出，等待一个线程完成它的工作
+    // 程序会继续执行，直到我们等待它退出，等待一个线程完成它的工作
     work.join()
     // 阻塞当前线程，直到另一个线程完成
 }
 ```
+
+## Exception
+
+```C++
+try {
+    func();
+} catch (VectorIndexError& e) {
+    e.diagnostic();
+}
+```
+
+```C++
+template <class T>
+T& Vector<T>::operator[] (int index) {
+    if (index < 0 || index >= m_size) {
+        throw VectorIndexError(index);
+    }
+    return m_elements[index];
+}
+```
+
+异常对象在堆中生成，它会一直向上抛出（函数停止执行，栈帧出栈）直到遇到能够捕获该异常的语句
+父异常类能捕获子异常类，因此catch必须先尝试捕获子类的异常再捕获父类的异常，否则编译报错
+在 C 中，申请内存（malloc）失败会返回NULL，但在 C++ 中，则是抛出 `bad_alloc()` 异常
+
+```C++
+void func() {
+    try {
+        while(1) {
+            char *p = new char[10000];
+        }
+    } catch (bad_alloc& e) {
+
+    }
+}
+```
+
+在类的构造函数中抛异常有较大风险，`new`会先分配内存再调用类的构造函数，如果构造函数抛出异常，则无法获取该对象的指针，分配的内存就无法被 `delete` 释放
+
+抛异常对象时建议直接抛出堆栈里对象（而不是指针），catch 该对象的引用（不会发生拷贝构造）。
+堆栈中的对象在堆栈的顶部，在沿路找到异常捕获语句在堆栈的底部，在处理完异常后，该对象的指针不用做特殊处理，它会之后的函数调用的栈帧覆盖掉
