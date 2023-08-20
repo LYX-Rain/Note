@@ -157,6 +157,16 @@ Tips for Header
 对应的源代码文件用相同的文件名，不同的后缀
 头文件使用标准头文件结构
 
+#### precompiled header 预编译头文件
+
+预编译头文件实际上是让你抓取一堆头文件，并将它们转换成编译器可以使用的格式，而不必一遍遍地读取这些头文件
+标准模板库，特别是来自头文件的标准模板库，它们由头文件组成，因为它们是模板，必须在头文件中定义
+例如每次在 C++ 文件中 `#include <vector>` 的时候，它需要读取整个 vector 头文件并编译它（vector头文件所 include 的其他头文件也要复制到 vector 头文件中并编译）
+每个翻译单元（.cpp）都是单独编译的，然后再进行链接，每次对 C++ 文件进行修改后，整个文件都要重新编译，那个 vector 头文件也是，这就非常耗时
+可以使用预编译头文件来替代，它的作用是接收一堆你告诉它要接受的头文件，然后只编译一次，以二进制格式存储。之后就不需要解析整个 vector 文件，每次只需要看预编译的头文件
+
+预编译头文件真正有用的是处理外部依赖（stl），本质上，它主要用于不是你写的代码。自己写的头文件可能经常会修改，如果放进预编译头文件中，这个预编译头文件就需要频繁地重新构建，这就失去了意义
+
 #### Function prototypes
 
 Computation in a C++ program is carried out in the context of ***functions***. A function is a named section of code that performs a specific operation. The **PowersOfTwo** program contains two functions—**main** and **raiseToPower**—each of which is described in more detail in one of the sections that follow. Although the definitions of these functions appear toward the end of the file, the **owersOfTwo** program provides a concise description of the **raiseToPower** function just after the library inclusions. This concise form is called a ***prototype*** and makes it possible to make calls to that function before its actual definition appears.
@@ -275,9 +285,154 @@ User-defined T -> C
 if C(T) is a valid constructor call for c，C 类有参数为 T 的构造函数
 if operator C() is defined for T，T类定义了一个 operator C()
 
-#### keyword
+```C++
+int main()
+{
+    // C style
+    int a = 5;
+    double value = a;           // 隐式转换，向范围更大的类型转不会丢失精度
+    double value2 = (double)a;  // 显式转换
 
-##### const
+    double b = 5.25;
+    int value3 = b;             // 隐式转换，会丢失精度
+
+    // C++ style
+    double value2 = static_cast<double>(a);    
+}
+```
+
+C++ 风格的转换主要有四种，它们不做任何 C 风格类型转换不能做的事，这并不是添加新功能，它只是添加了一些语法糖
+
+- static_cast：静态类型转换，会做一些编译检查
+- reinterpret_cast：把某段内存重新解释成别的东西，就像把类型双关用语言表达出来
+- const_cast：为变量移除或添加 const 限定
+- dynamic_cast：安全地转化派生类和基类之间的转换，会做运行时检查
+
+用 C++ 风格的类型转换好处是，除了可以做编译时检查外（类型是否兼容），还可以很方便地在代码库中搜索它们，查看哪做了类型转换
+
+dynamic_cast 只能用于多态类类型，它是专门用于沿继承层次结构进行的强制类型转换（子类转换为基类或基类转换为子类），通常是基类转换成派生类，因为派生类转换为基类可以直接隐式转换，不需要强制类型转换
+dynamic_cast 做了额外的工作来确保我们实际的类型转换是有效的，它更像一个函数，它不想编译时进行的类型转换，而是在运行时计算，因此它有相关的运行成本，它存储了运行时类型信息（runtime type information）所有类型的运行时类型信息
+dynamic_cast 用于处理多态场景下，将使用父类指针指向的对象转换为子类指针，确保该对象是对应的子类。如果转换失败，会返回一个 `NULL` 指针，也就是0
+
+```C++
+class Entity
+{
+public:
+    virtual void PrintName() {}
+};
+
+class Player : public Entity
+{
+
+};
+
+class Enemy : public Entity
+{
+
+};
+
+int main()
+{
+    Player* player = new Player();
+    Entity* e = player;
+    Player* p = dynamic_cast<Player*> e;
+}
+
+```
+
+
+
+
+#### 类型双关
+
+类型双关是指，在C++中绕过类型系统：将拥有的某段内存当作不同类型的内存来对待
+C++ 是强类型语言，在创建变量是要声明它的类型，但是c++的类型系统并不像其他语言（如 Java）那样强制。虽然类型是由编译器强制执行的，但由于可以直接访问内存，可以很容易绕过类型系统
+任何类型的数据在内存中都是以二进制存储的，自定义的结构体或类都只是在以自己的规则解读这个二进制数据
+例如，当前有一个类，我们想把它写成一个字节流，假设它是一个基本类型的结构，并且没有指向内存中其他地方的指针，那么我们就可以重新解释整个结构或类。将它作为一个字节数组，然后直接写出来或者流出来（字节流），甚至不需要关系里面是什么类型
+在很多情况下，这种原始的、底层的访问非常有用，这也是为什么C++那么高效
+
+```c++
+int main()
+{
+    int a = 50;
+    double value = a;   // value 会有一块内存，存放值为50的 double 类型的数据（c++会做隐式转换）
+    double value2 = *(double*)&a;   // 将 a 地址当作 double类型的指针，再解引用，这就是类型双关，直接将 int 数据当作 double 数据解析
+}
+```
+
+更有意义的例子：
+结构体本身不包含任何类型的填充数据，如果是一个空的结构体，那么它至少有一个字节，因为我们需要对这段内存进行寻址，所以里面必须有东西。
+但是如果里面有变量，比如两个 int 数据，那么这个结构体就这两个整数，没有多余的数据。因此，我们可以将这个结构体看成是一个 int 数组
+
+```C++
+struct Entity
+{
+    int x, y;
+};
+
+int main()
+{
+    Entity e = {5, 8};
+
+    int* position = (int*)&e;   // e 就是指向第一个 int 数据的指针
+    std::cout << position[0] << ", " << position[1] << std::endl;   // 5, 8
+    int y = *(int*)((char*)&e + 4); // 取 e 的地址，转换成 char 类型的指针，并将其向后偏移 4（char 类型的指针每次偏移1字节），正好是 y 的首地址（int 类型为4字节），再将这个地址转换为 int 类型的指针，最后解引用
+}
+```
+
+这回到了原始的内存操作，当你不想处理某种类型的复制或转换时，它非常有用，并且非常高效，它只是选择了一种不同的方式来解释那段内存
+实际上做的只是将某个类型的指针转换为另一个类型的指针
+
+#### union 联合体
+
+联合体有点像类或者结构体类型，只不过它一次只能占用一个成员的内存
+通常来说一个包含4个浮点数的结构体总共有 4x4=16 个字节的内存，而一个联合体只能有一个成员
+如果在联合体中声明4个浮点数，联合体的大小仍然是 4 个字节，这4个浮点数共用一块内存，当修改其中任意一个，其他的的也会同步被修改
+可以像使用结构体或类一样给联合体添加静态函数或普通函数、方法，但是不能使用虚函数
+通常用联合体做的事是和类型双关紧密相关的
+通常union是匿名使用的，但匿名 union 不能含有成员函数
+
+```C++
+struct Vector2
+{
+    float x, y;
+}
+
+struct Vector4
+{
+    union
+    {
+        struct
+        {
+            float x, y, z, w;
+        };
+        struct
+        {
+            Vector2 a, b;
+        }
+    }
+}
+
+void PrintVector2(const Vector2& vector)
+{
+    std::cout << vector.x << ", " << vector.y << std::endl;
+}
+
+int main()
+{
+    Vector4 vector = { 1.0f, 2.0f, 3.0f, 4.0f };
+    PrintVector2(vector.a);     // 1.0, 2.0
+    PrintVector2(vector.b);     // 3.0, 4.0
+    vector.z = 500.0f;
+    PrintVector2(vector.a);     // 1.0, 2.0
+    PrintVector2(vector.b);     // 500.0, 4.0
+}
+
+```
+
+### keyword
+
+#### const
 
 const 称之为伪关键字，因为它不改变生成的代码。
 有点像类和结构体的可见性，它是一个机制，对开发人员写代码强制特定的规则
@@ -898,6 +1053,36 @@ int main()
 }
 ```
 
+二维数组本质是数组的数组，即数组指针的集合，数组中的每个元素都是另一个数组的指针，指向另一块内存
+
+```C++
+int main()
+{
+    int** a2d = new int*[50];       // 分配一个包含 50 个 int 类型指针的数组
+    for (int i = 0; i < 50; i++) {
+        a2d[i] = new int[50];       // 为数组中的每个指针分配其所指向的内存空间
+    }
+
+    for (int i = 0; i < 50; i++) {
+        delete[] a2d[i];            // 删除要从最里层开始
+    }
+    delete[] a2d;
+
+    // 3维数组就是嵌套一层 for 循环，多维数组以此类推
+    int*** a3d = new int**[50];     // 指针分配
+    for (int i = 0; i < 50; i++) {
+        a3d[i] = new int*[50];      // 指针分配
+        for (int j = 0; j < 50; j++) {
+            // a3d[i][j] = new int[50];
+            int** ptr = a3d[i];
+            ptr[j] = new int[50]    // 实际 int 数组分配
+        }
+    }
+}
+```
+
+这种多维数组的分配方式会造成内存碎片问题（堆上内存是由空闲链表随机分配的），并且容易导致 cache miss
+
 C++ 11 中引入了标准数组（standard array）`std::array` 用于替代 C 中的数组，它与原始数组语言风格一致，并且同样存储在栈上
 
 ```C++
@@ -977,6 +1162,28 @@ int main()
 push_back 会先在main函数栈帧中创建对象，然后再复制到 vector 的内存空间中
 使用 emplace_back 替代 push_back，emplace_back 函数使用传递给它的参数在分配好的内存中直接构造对象
 
+#### 排序
+
+`std::sort()` 会在我们提供的特定范围内对元素进行排序，我们需要给它提供2个迭代器，一个开始迭代器和一个结束迭代器，它会尝试基于类型进行排序（使用操作符 `<`）
+或者可以给它一个函数来做比较
+它没有任何返回值，排序的复杂度是 $ N*log(N) $
+
+```C++
+#include <iostream>
+#include <vector>
+#include <algorithm>
+
+int main()
+{
+    std::vector<int> values = {3, 5, 1, 4, 2};
+    std::sort(values.begin(), values.end());
+    std::sort(values.begin(), values.end(), [](int a, int b)
+    {
+        return a < b;
+    });
+}
+
+```
 
 ### The Stack class
 
@@ -1193,9 +1400,42 @@ int main()
 - 需要额外的内存存储 VTable，其中包含实际基类中指向虚函数表的成员指针
 - 每次调用虚函数需要遍历 VTable 以查看其实际指向的函数 
 
-Virtual destructor
+#### Virtual destructor 虚析构函数
 
-当父类指针指向子类对象时，在要 delete 的时候，需要调用子类的析构函数，因此要通过`virtual`使得调用析构函数时能够动态绑定调用到子类的析构函数
+在多态的场景下，当父类指针指向子类对象时，在要 delete 的时候，需要调用子类的析构函数，因此要通过`virtual`使得调用析构函数时能够动态绑定调用到子类的析构函数
+
+虚析构函数的意思不是 override 析构函数，而是加上一个析构函数。如果把基类析构函数标记为虚函数，它实际上会调用两个析构函数，先调用派生类的析构函数，然后再调用基类的析构函数
+
+```C++
+class Base {
+public:
+    Base() { std::cout << "Base Constructor\n"; }
+    virtual ~Base() { std::cout << "Base Destructor\n"; }   // 不加 virtual 就不会调用派生类的析构函数
+};
+
+class Derived : public Base {
+public:
+    Derived() { m_Array = new int[5]; std::cout << "Derived Constructor\n"; }
+    ~Derived() { delete[] m_Array; std::cout << "Derived Destructor\n"; }
+private:
+    int* m_Array;
+}
+
+int main()
+{
+    Base* Derived = new Derived();
+    delete derived;
+}
+
+/*
+Base Constructor
+Derivde Constructor
+Derived Destructor
+Base Destructor
+*/
+```
+
+只要允许一个类拥有子类，就必须将其析构函数声明为虚函数，否则就不能安全的扩展这个类
 
 ### Pure Virtual Function
 
@@ -1984,24 +2224,96 @@ int main()
 
 ## Thread
 
+thread 头文件中包含与线程有关的类 `std::thread`。通过创建该类的对象，并传入一个函数指针来启动一个线程。线程创建完成后，该线程会执行传入的函数（称为回调函数）
+阻塞当前线程，直到另一个线程完成它的工作是通过 `worker.join()` 函数实现，意思是等待线程加入（Thread joining）。在其他语言中如C#，被叫做wait，python中是 await
 
 ```C++
 #include <iostream>
 #include <thread>
 
+static bool s_Finished = false;
+
 void DoWork()
 {
+    while (!s_Finished) {
+        std::cout << "Working...\n";
+        std::this_thread::sleep_for(1s);    // 等待1秒
+    }
 
 }
 
 int main()
 {
     // 启动一个线程执行传入的函数
-    std::thread worker(DoWork)      // function pointer
+    std::thread worker(DoWork)      // 创建线程对象
     // 程序会继续执行，直到我们等待它退出，等待一个线程完成它的工作
-    work.join()
-    // 阻塞当前线程，直到另一个线程完成
+    
+    std::cin.get();     // 阻塞直到按下 Enter
+    s_Finished = true;
+    
+    worker.join() // 阻塞当前线程，直到另一个线程完成
+    std::cout << "Finished" << std::endl;
+    
 }
+```
+
+worker 线程会一直打印 "Working..." 到控制台，主进程会等待我们按下回车键，当按下回车后，主线程将 `s_Finished` 置为 true，worker 线程检测到后会跳出循环，并结束线程，主线程在等待worker 线程结束后会打印 "Finished"
+使用 `std::this_thread` 来控制当前线程
+
+### 计时
+
+评估性能和做基准测试，看代码运行的多快需要知道程序实际运行的时间
+C++ 11 之后有 `chrono` 库，它是C++库的一部分，它是跨平台的
+当需要更高精度的计时器时，就需要使用操作系统库
+
+```C++
+#include <iostream>
+#include <chrono>
+#include <thread>
+
+int main()
+{
+    using namespace std::literals::chrono_literals;
+
+    auto start = std::chrono::high_resolution_clock::now(); // 开始时间
+    std::this_thread::sleep_for(1s);
+    auto end = std::chrono::high_resolution_clock::now();   // 结束时间
+
+    std::chrono::duration<float> duration = end - start;    // 高精度计时
+
+    std::cout << duration.count() << std::endl;
+
+}
+```
+
+对整个对象生命周期计时
+
+```C++
+struct Timer
+{
+    std::chrono::time_point<std::chrono::steady_clock> start, end;
+    std::chrono::duration<float> duration;
+    Timer() {
+        start = std::chrono::high_resolution_clock::now(); // 开始时间
+    }
+
+    ~Timer() {
+        end = std::chrono::high_resolution_clock::now(); // 开始时间
+        duration = end - start;
+
+        float ms = duration.count() * 1000.0f;
+        std::cout << "Timer took " << ms << "ms" << std::endl;
+    }
+}
+
+void Function()
+{
+    Timer timer;    // 在函数开始时创建 Timer 对象，整个函数作用域就会被计时了
+    for (int i = 0; i < 100; i++) {
+        //...
+    }
+}
+
 ```
 
 ## Exception
