@@ -542,6 +542,29 @@ int main()
 }
 ```
 
+#### static
+
+static means
+- Hidden: 隐藏
+- Persistent: 持久
+
+static local variables: Persistent storage
+static member variables: shared by all instances
+static member function: shared by all instances, can only access static member variables
+
+static 的局部对象，在第一次进函数时初始化
+
+静态成员变量
+static member variables
+- global to all class member function
+- initialized once, at file scope
+- provide a place for this variable and init it in .cpp
+- No 'static' in .cpp
+
+在该类的所有对象中都存在，可以直接使用，只有一个值，对所有对象保持一致
+
+静态成员函数
+静态成员函数只能访问静态成员变量，因为静态的成员函数没有 `this` 隐藏变量，它和对象无关，不能访问对象内的东西
 ### Expressions
 
 #### 三元运算符
@@ -632,6 +655,62 @@ Java 中实现打印对象是通过重写对象的 toString() 方法，print 函
 其他二元运算符做成非成员函数
 
 ### Statements
+
+### lvalue and rvalue 左值和右值
+
+左值是有某种存储支持的变量，右值是临时值
+绝大多数时候左值在等号左边，右值在右边
+左值是由实际的存储空间的
+右值是临时的，它没有实际存储空间，因此不能给右值赋值。右值不只是字面量，它也可以是函数的结果
+字符串字面量是左值，用 `+` 连接两个字符串变量的表达式也是左值
+
+左值引用 `&` 只能接受左值，因为它必须在内存中有实际的地址，但是加上 const 后 `const type&` 就可以兼容右值
+
+所以为了兼容字符串字面量，接受字符串的函数的参数通常会写成 `(const std::string& str)`
+
+右值引用 `&&` 只接受右值，右值引用的函数表示它只接受临时对象
+
+二者可以重载
+
+```C++
+void PrintName(const std::string& name) {
+    std::cout << "lvalue " << name << std::endl;
+}
+
+void PrintName(std::string&& name) {
+    std::cout << "rvalue " << name << std::endl;
+}
+
+int main() {
+    std::string firstName = "Yan";
+    std::string lastName = "Chernikov";
+
+    std::string fullName = firstName + lastName;
+
+    PrintName(fullName);                // lvalue 
+    PrintName(firstName + lastName);    // rvalue
+}
+```
+
+右值引用通常用在移动语义方面，它主要的优势在于优化，如果我们知道传入的是一个临时对象的话，那么我们就不需要担心它们是否活着、是否完整、是否拷贝
+
+### 参数计算顺序
+
+
+
+```C++
+void PrintSum(int a, int b) {
+    std::cout << a << " + " << b << " = " << (a+b) << std::endl;
+}
+
+int main() {
+    int value = 0;
+    PrintSum(value++, value++); // 未定义行为，C++标准没有指定这种情况下应该发生什么，完全依赖于编译器的实现
+}
+
+```
+
+C++ 17 规定了：后缀表达式必须在别的表达式之前被计算
 
 ### macro
 
@@ -1955,29 +2034,6 @@ Public inheritance should imply substitution
 
 downcast：把父类当子类看，有风险
 
-### static
-
-static means
-- Hidden: 隐藏
-- Persistent: 持久
-
-static local variables: Persistent storage
-static member variables: shared by all instances
-static member function: shared by all instances, can only access static member variables
-
-static 的局部对象，在第一次进函数时初始化
-
-静态成员变量
-static member variables
-- global to all class member function
-- initialized once, at file scope
-- provide a place for this variable and init it in .cpp
-- No 'static' in .cpp
-
-在该类的所有对象中都存在，可以直接使用，只有一个值，对所有对象保持一致
-
-静态成员函数
-静态成员函数只能访问静态成员变量，因为静态的成员函数没有 `this` 隐藏变量，它和对象无关，不能访问对象内的东西
 
 ## Recurision
 
