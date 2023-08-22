@@ -2205,6 +2205,104 @@ void f(const A* this)
 
 如果成员变量是 `const`的，必须在使用初始化列表对其进行初始化，并且不能将其作为数组的size
 
+### 移动语义
+
+转移内存所有权，移动语义本质上允许我们移动对象
+C++ 11 引入了右值引用，这是移动语义所必需的
+
+在写代码时，我们不想把一个对象从一个地方复制到另一个地方，但又不得不复制这个函数需要取得这个对象的所有权（向函数传递一个对象，或从函数返回一个对象），直接传指针就没法用析构函数管理内存
+
+在栈帧中构造一个一次性对象，
+
+```C++
+class String
+{
+public:
+    // copy
+    String(const char* string) {
+        m_Size = strlen(string);
+        m_Data = new char[m_Size];
+        memcpy(m_Data, string, m_Size);
+    }
+    // copy
+    String(const String& other) {
+        m_Size = other.m_Size;
+        m_Data = new char[m_Size];
+        memcpy(m_Data, other.m_Data, m_Size);
+    }
+    // move
+    String(String&& other) noexcept {   // 没有重新分配内存
+        m_Size = other.m_Size;
+        m_Data = other.m_Data;
+
+        other.m_Size = 0;
+        other.m_Data = nullptr;
+    }
+
+    ~String() {
+        delete m_Data;
+    }
+private:
+    char* m_Data;
+    uint32_t m_Size;
+}
+
+
+class Entity
+{
+public:
+    Entity(const String& name) : m_Name(name) {}
+    Entity(String&& name) : m_Name(std::move(name)) {}
+
+    void PrintName() {
+        m_Name.Print();
+    }
+private:
+    String m_Name;
+}
+
+int main()
+{
+    Entity entity("Cherno");    // 字符串字面量是右值
+    entity.PrintName();
+
+    String string = "Hello";
+    String dest((String&&)string);
+    String dest(std::move(string));
+}
+
+```
+
+std::move 与移动赋值操作符
+
+如果要将现有对象移动到另一个对象中，而不是构造一个新对象
+
+赋值运算符只有当我们把一个变量赋值给一个已有的变量时才会被调用
+
+```C++
+
+String& operator=(String&& other) noexcept {
+    if (this !=&other) {
+        delete[] m_Data;        // 先删除已有数据
+
+        m_Size = other.m_Size;
+        m_Data = other.m_Data;  // 移动另一个数据到这里
+
+        other.m_Size = 0;
+        other.m_Data = nullptr; // 删除 other 对象的指针
+    }
+    return *this;
+
+}
+
+String apple = "Apple";
+String dest;
+dest = std::move(apple);
+
+```
+
+如果是不同的对象，但是数据相同（刚好匹配）也可以移动
+
 ## Efficiency and Representation
 
 ## Linear Structures
@@ -2267,6 +2365,16 @@ int main()
 这种创建数组的方式与标准数组类在 C++ 标准模板库中的工作方式相似，这有点像 C++ 的 meta programming（元编程），编译器在编译时实际在进行编程
 
 ## Maps
+
+
+```C++
+// C++ 17 结构化绑定 迭代器
+for (auto [key, value] : map) {
+    std::cout << key << " = " << value << std::endl;
+}
+
+```
+
 
 ## Trees
 
