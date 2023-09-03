@@ -2019,6 +2019,10 @@ extern FILE *stderr;  // Standard error (descriptor 2)
 
 ## Network Programming
 
+![](images/Hardware%20Organization%20of%20a%20Network%20Host.png)
+
+Linux 将网络抽象成文件 I/O，通过写入文件和读取文件实现向网络发送数据和接收数据
+
 ## Concurrent Programming（并发编程）
 
 如果逻辑控制流在时间上重叠，那么它们就是*并发的*（concurrent）

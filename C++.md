@@ -93,7 +93,16 @@ constexpr int sz = size();      // 只有当size是一个 constexpr 函数时，
 
 ### 标准库类型 vector
 
-### 迭代器
+### iterator 迭代器
+
+可以使用下标运算符来访问 `string` 对象的字符或 `vector`对象的元素，但是还有一种更通用的机制——迭代器（iterator）
+所有标准库容器都可以使用迭代器，但是其中只有少数几种才同时支持下标运算符。严格来说，string对象不属于容器类型，但是string支持很多与容器类型类似的操作
+
+类似于指针类型，迭代器也提供了对对象的间接访问。就迭代器而言，其对象是容器中的元素或者 `string` 对象中的字符。使用迭代器可以访问某个元素，迭代器也能从一个元素移动到另一个元素。迭代器有有效和无效之分，这和指针差不多。有效的迭代器或指向某个元素，或者指向容器中尾元素的下一位置；其他情况都属于无效
+
+####
+
+和指针不一样的是，获取迭代器不是使用取地址符，有迭代器的类型同时拥有返回迭代器的成员。比如，这些类型都有名为 `begin` 和 `end` 的成员，其中begin成员负责返回指向第一个元素（或第一个字符）的迭代器
 
 ### 数组
 
@@ -154,11 +163,371 @@ int arr2[sz];
 
 ## The IO Library
 
+### string stream string 流
+
+`sstream` 头文件定义了三个类型来支持内存 IO
+`istringstream` 从 string 读取数据，`ostringstream` 向 string 写入数据，`stringstream` 既可以读也可以写。
+与 `fstream` 类型类似，头文件 `sstream` 中定义的类型都继承自 `iostream` 头文件中的类型。此外 `sstream` 还增加了一些成员来管理与流相关联的 string。
+
+|                   |                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------- |
+| *sstream* strm    | strm 是一个未绑定的 stringstream 对象                                            |
+| *sstream* strm(s) | strm 是一个 *sstream* 对象，保存 string s 的一个拷贝。此构造函数是 `explicit` 的 |
+| strm.str()        | 返回 strm 所保存的 string 的拷贝                                                 |
+| strm.str(s)       | 将 string s 拷贝到 strm 中。返回 void                                            |
+
+#### 使用 istringstream
+
+当需要对整行文本和其中的每个单词进行处理时，通常可以使用 `istringstream`
+例如有一个文件，列出了一些人和他们的电话号码，电话号码可以有多个：
+
+```
+morgan 4325252 34254325 145135
+drew 5436362532
+lee 654367 252 56756
+```
+
+首先定义一个类来描述输入数据
+
+```C++
+struct PersonInfo {
+    string name;
+    vector<string> phones;
+}
+```
+
+读取文件，并创建一个 PersonInfo 的 vector 来保存文件中的每条记录
+
+```c++
+string line, word;
+vector<PersonInfo> people;
+
+while (getline(cin, line)) {
+    PersonInfo info;
+    istringstream record(line);
+    record >> info.name;
+    while (record >> word) {
+        info.phones.push_back(word);
+    }
+    people.push_back(info);
+}
+```
+
+使用 `getline` 从标准输入读取整行数据，在 while 中定义一个局部 PersonInfo 对象来保存当前行中的数据
+将一个 `istringstream` 与刚刚读取的文本进行绑定，这样就可以在此 istringstream 上使用输入运算符来读取当前记录中的每个元素
+当读取完 line 中所有数据后，内层 while 循环就结束了。
+
 ## Sequential Containers
+
+一个容器就是一些特定类型对象的集合。**顺序容器**（sequential container）为程序员提供了控制元素存储和访问顺序的能力。这种顺序不依赖于元素的值，而是与元素加入容器时的位置相对应
+
+所有顺序容器都提供了快速顺序访问元素的能力，但是这些容器在以下方面都有不同的性能折中：
+- 向容器添加或从容器中删除元素的代价
+- 非顺序访问容器中元素的代价
+
+| 容器         | 描述                                                                        |
+| ------------ | --------------------------------------------------------------------------- |
+| vector       | 可变大小数组。支持快速随机访问。在尾部之外的位置插入或删除元素可能很慢      |
+| deque        | 双端队列。支持快速随机访问。在头尾位置插入/删除速度很快                     |
+| list         | 双向链表。只支持双向顺序访问。在 list 中任何位置进行插入/删除操作速度都很快 |
+| forward_list | 单向链表。只支持单向顺序访问。在链表任何位置进行插入/删除操作速度都很快     |
+| array        | 固定大小数组。支持快速随机访问。不能添加或删除元素                          |
+| string       | 与 vector 相似的容器，但专门用于保存字符。随机访问快。在尾部插入/删除速度快 |
+
+forward_list 的设计目的是达到与最好的手写的单向链表数据结构相当的性能。因此，forward_list 没有 size 操作，因为保存或计算其大小就会比手写链表多出额外的开销。对于其他容器而言，size 保证是一个快速的常量时间的操作
+
+#### 确定使用哪种顺序容器
+
+如果程序只有在读取输入时才需要在容器中间位置插入元素，随后需要随机访问元素，则
+- 首先，确定是否真的需要在容器中间位置添加元素。当处理输入数据时，通常可以很容易地向 vector 追加数据，然后再调用 sort 函数来重排容器中的元素，从而避免再中间位置添加元素
+- 如果必须在中间位置插入元素，考虑在输入阶段使用 list，一旦输入完成，将 list 中的内容拷贝到一个 vector 中
+
+### 容器库概览
+
+容器操作
+
+|                                 |                                                                  |
+| ------------------------------- | ---------------------------------------------------------------- |
+| 类型别名                        |                                                                  |
+| iterator                        | 此容器类型的迭代器类型                                           |
+| const_iterator                  | 可以读取元素，但不能修改元素的迭代器类型                         |
+| size_type                       | 无符号整数类型，足够保存此种容器类型最大可能容器的大小           |
+| difference                      | 带符号整数类型，足够保存两个迭代器之间的距离                     |
+| value_type                      | 元素类型                                                         |
+| reference                       | 元素的左值类型；与value_type& 含义相同                           |
+| const_reference                 | 元素的 const 左值类型（即，const value_type&）                   |
+| 构造函数                        |                                                                  |
+| C c;                            | 默认构造函数                                                     |
+| C c1(c2)                        | 构造 c2 的拷贝 c1                                                |
+| C c(b, e)                       | 构造 c，将迭代器 b 和 e 指定范围内的元素拷贝到 c（array 不支持） |
+| C c(a, b, c...)                 | 列表初始化c                                                      |
+| 赋值与 swap                     |                                                                  |
+| c1 = c2                         | 将c1 中的元素替换为 c2 中元素                                    |
+| c1 = {a, b, c}                  | 将 c1 中的元素替换为列表中元素（不适用于 array）                 |
+| a.swap(b)                       | 交换 a 和 b 的元素                                               |
+| swap(a, b)                      | 与 a.swap(b) 等价                                                |
+| 大小                            |                                                                  |
+| c.size()                        | c 中元素的数目（不支持 forward_list）                            |
+| c.max_size()                    | c 可保存的最大元素数目                                           |
+| c.empty()                       | 若 c 中存储了元素，返回 false，否则返回 true                     |
+| 添加/删除元素（不适用于 array） | 在不同容器中，这些操作的接口都不同                               |
+| c.insert(args)                  | 将 args 中的元素拷贝进 c                                         |
+| c.emplace(inits)                | 使用inits 构造 c 中的一个元素                                    |
+| c.erase(args)                   | 删除 args 指定的元素                                             |
+| c.clear()                       | 删除 c 中的所有元素，返回 void                                   |
+
+#### 迭代器
+
+一个 **迭代器范围**（iterator range）由一对迭代器表示，两个迭代器分别指向同一个容器中的元素或者时尾元素之后的位置（one past the element）。这种元素范围为 **左闭合区间**
+> [begin, end)
+
+#### 容器定义和初始化
+
+只有顺序容器的构造函数才能接受大小参数
+
+|             |                                                                                         |
+| ----------- | --------------------------------------------------------------------------------------- |
+| C seq(n)    | seq  包含 n 个元素，这些元素进行了值初始化；此构造函数是 `explicit` 的（string 不适用） |
+| C seq(n, t) | seq 包含 n 个初始化为值 t 的元素                                                        |
+
+**标准库 array 具有固定大小**
+
+与内置数组一样，标准库 array 的大小也是类型的一部分。当定义一个 array 时，除了指定元素类型，还要指定容器大小
+
+```C++
+array<int, 42>
+array<string, 10>
+```
+
+由于大小是 array 类型的一部分，array 不支持普通的容器构造函数
+
+### 顺序容器操作
+
+除 array 外，所有标准容器都提供灵活的内存管理。在运行时可以动态添加或删除元素来改变容器大小
+
+|                       |                                                                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| c.push_back(t)        | 在 c 的尾部创建一个值为 t 或由 args 创建的元素。返回 void                                                                                           |
+| c.emplace_back(args)  |                                                                                                                                                     |
+| c.push_front(t)       | 在 c 的头部创建一个值为 t 或由 args 创建的元素。返回 void                                                                                           |
+| c.emplace_front(args) |                                                                                                                                                     |
+| c.insert(p, t)        | 在迭代器 p 指向的元素之前创建一个值为 t 或由 args 创建的元素。返回指向新添加的元素的迭代器                                                          |
+| c.emplace(p, args)    |                                                                                                                                                     |
+| c.insert(p, n, t)     | 在迭代器 p 指向的元素之前插入 n 个值为 t 或由 args 创建的元素。返回指向新添加的第一个元素的迭代器；若 n 为 0，则返回 p                              |
+| c.insert(p, b, e)     | 将迭代器 b 和 e 指定范围内的元素插入到迭代器 p 指向的元素之前。b 和 e 不能指向 c 中的元素。返回指向新添加的第一个元素的迭代器；若范围为空，则返回 p |
+| c.insert(p, il)       | il 是一个花括号包围的元素值列表。将这些给定值插入到迭代器 p 指向的元素之前。返回指向新添加的第一个元素的迭代器；若列表为空，则返回 p                |
+
+forward_list 有自己专有版本的 insert 和 emplace
+forward_list 不支持 push_back 和 emplace_back
+vector 和 string 不支持 push_front 和 emplace_front
+
+注：向一个 vector、string或 deque 插入元素会使所有指向容器的迭代器、引用和指针失效
+
+**在容器中的特定位置添加元素**
+
+每一个 `insert` 函数都接受一个迭代器作为其第一个参数。迭代器指出了在容器的什么位置放置新元素
+除了第一个迭代器参数之外，insert 函数还可以接受更多的参数，这与容器构造函数类似
+通过使用 insert 的返回值，可以在容器中一个特定位置反复插入原始
+
+**使用 emplace 操作**
+
+C++ 11 引入了三个新成员：emplace_front、emplace 和 emplace_back，这些操作构造而不是拷贝元素
+当调用 push 或 insert 成员函数时，我们将元素类型的对象传递给它们，这些对象被拷贝到容器中。而当我们调用一个 emplace 成员函数时，则是将参数传递给元素类型的构造函数。emplace 成员使用这些参数在容器管理的内存空间中直接构造元素
+
+```C++
+vector<Sales_data> c;
+c.emplace_back("test", 234, 423.534);
+c.push_back("fesf", 432, 435.22);           // 错误：没有接受三个参数的 push_back 版本
+c.push_back(Sales_data("fsr", 432, 435.21));// 正确：创建一个临时的 Sales_data 对象传递给 push_back
+```
+
+其中对 emplace_back 的调用和第二个 push_back 调用都会创建新的 Sales_data 对象。在调用 emplace_back 时，会在容器管理的内存空间中直接创建对象。而调用 push_back 则会创建一个局部临时对象，并将其压入容器中
+
+emplace 函数的参数根据元素类型而变化，参数必须与元素类型的构造函数相匹配
+
+#### 访问元素
+
+#### 删除元素
+
+|               |                                                                                                                                                      |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| c.pop_back()  | 删除 c 中尾元素。若 c 为空，则函数行为未定义。函数返回 void                                                                                          |
+| c.pop_front() | 删除 c 中头元素。若 c 为空，则函数行为未定义。函数返回 void                                                                                          |
+| c.erase(p)    | 删除迭代器 p 所指定的元素，返回一个指向被删除元素之后的迭代器，若 p 指向尾元素，则返回尾后（off-the-end）迭代器。若 p 是尾后迭代器，则函数行为未定义 |
+| c.erase(b, e) | 删除迭代器 b 和 e 所指定范围内的元素。返回一个指向最后一个被删除元素之后的元素，若 e 本身就是尾后迭代器，则函数也返回尾后迭代器                      |
+| c.clear()     | 删除 c 中的所有元素。返回 void                                                                                                                       |
+
+forward_list 有特殊版本的 erase，并且不支持 pop_back
+vector 和 string 不支持 pop_front
+删除 deque 中除首尾位置之外的任何元素都会使所有迭代器、引用和指针失效
+指向 vector 或 string 中删除点之后位置的迭代器、引用和指针都会失效
+
+#### 容器操作可能使迭代器失效
+
+在向容器添加元素后：
+- 如果容器是 vector 或 string，且存储空间被重新分配，则指向容器的迭代器、指针和引用都会失效。如果存储空间未重新分配，指向插入位置之前的元素的迭代器、指针和引用仍然有效，但之后的将会失效
+- 对于 deque，插入到除首尾之外的任何位置都会导致迭代器、指针和引用失效。如果在首尾位置添加元素，迭代器会失效，但指向存在的元素的引用和指针不会失效
+- 对于 list 和 forward_list，指向容器的迭代器、指针和引用仍有效
+
+当从一个容器中删除元素后，指向被删除元素的迭代器、指针和引用会失效，此外：
+- 对于 list 和 forward_list，指向容器其他位置的迭代器、引用和指针仍有效
+- 对于 deque，如果在首尾之外的任何位置删除元素，那么指向被删除元素外其他元素的迭代器、引用或指针也会失效。如果是删除 deque 的尾元素，则尾后迭代器会失效，但其他迭代器、引用和指针不受影响；如果是删除首元素，这些也不会受影响
+- 对于 vector 和 string，指向被删除元素之前元素的迭代器、引用和指针仍有效
+
+使用失效的迭代器、指针或引用是严重的运行时错误
+当使用迭代器时，最小化要求迭代器必须保持有效的程序片段
+由于向迭代器添加元素和从迭代器删除元素的代码可能会使迭代器失效，因此必须保证每次改变容器的操作之后都正确地重新定位迭代器
+
+### vector 对象是如何增长的
+
+### 额外的 string 操作
+
+#### 构造 string 的其他方法
+
+|                          |                                                                                                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| string s(cp, n)          | s 是cp指向的数组中前 n 个字符的拷贝                                                                                                                          |
+| string s(s2, pos2)       | s 是 string s2 从下标 pos2 开始的字符的拷贝。若pos2>s2.size()，构造函数的行为未定义                                                                          |
+| string s(s2, pos2, len2) | s 是 string s2 从下标 pos2 开始 len2 个字符的拷贝。若 pos2 > s2.size()，构造函数的行为未定义。不管 len2 的值是多少，构造函数至多拷贝 s2.size() - pos2 个字符 |
+
+**substr 操作**
+
+`substr` 操作返回一个 string，它是原始 string 的一部分或全部的拷贝。可以传递给 substr 一个可选的开始位置和计数值：
+
+```C++
+string s("hello world");
+string s2 = s.substr(0, 5);     // hello
+string s3 = s.substr(6);        // world
+string s4 = s.substr(6, 11);    // world
+string s5 = s.substr(12);       // 抛出一个 out_of_range 异常
+```
+
+#### string 搜索操作
+
+string 类提供了 6 个不同的搜索函数，每个函数都有 4 个重载版本。每个搜索操作都返回一个 `string::size_type` 值，表示匹配发生位置的下标。如果搜索失败，则返回一个名为 `string::npos` 的static 成员。
+标准库将 npos 定义为一个 `const string::size_type` 类型，并初始化为值 -1。由于 npos 是一个 `unsigned` 类型，此初始值意味着 npos 等于任何 string 最大的可能大小。
+
+`find` 函数完成最简单的搜索。它查找参数指定的字符串，若找到，则返回第一个匹配位置的下标，否则返回 npos：
+
+```C++
+string name("AnnaBelle");
+auto pos1 = name.find("Anna");  // pos1 = 0
+```
+
+搜索（以及其他 string 操作）是大小写敏感的
+
+一个更复杂的问题是查找与给定字符中任何一个字符匹配的位置。例如定位 name 中的第一个数字：
+
+```C++
+string numbers("0123456789");
+string name("r2d2");
+auto pos = name.find_first_of(numbers); // 返回1，即 name 中第一个数字的下标
+```
+
+如果要搜索第一个不在参数中的字符，应该调用 `find_first_not_of`。例如搜索 dept 中第一个非数字字符：
+
+```C++
+string dept("03714p3");
+auto pos = dept.find_first_not_of(numbers); // 返回5——字符'p'的下标
+```
+
+#### 数值转换
+
+C++ 11 引入了多个函数，可以实现数值数据与标准库 string 之间的转换：
+
+```C++
+int i = 42;
+string s = to_string(i);
+double d = stod(s);
+```
+
+| | |
+|-|-|
+|to_string(val) | 一组重载函数，返回数值 val 的 string 表示。val 可以是任何算术类型 |
+| stoi(s, p, b) | 返回 s 的起始字串（表示整数内容）的数值，返回值类型分别是 int |
+| stol(s, p, b) | long |
+| stoul(s, p, b) | unsigned long |
+| stoll(s, p, b) | long long |
+| stoull(s, p, b) | unsigned long long，b表示转换所用的基数，默认为 10。p 是 size_t 指针，用来保存 s 中第一个非数值字符的下标，p 默认为 0，即函数不保存下标 |
+
+要转换为数值的 string 中第一个非空白必须是数值中可能出现的字符：
+
+```C++
+string s2 = "pi = 3.14";
+double d = stod(s2.substr(s2.find_first_of("+-.0123456789")));
+```
+
+首先调用 `find_first_of` 来获得 s 中第一个可能是数值的一部分的字符的位置，然后将 s 中此位置开始的字串传递给 stod
+stod 函数读取此参数，处理其中的字符，直到遇到不可能是数值的一部分的字符，然后将这个数值的字符串表示形式转换为对应的浮点数
+
+string 参数中第一个非空白符必须是符号（+ 或 -）或数字。它可以是 0x 或 0X 开头来表示十六进制数
+对那些将字符串转换为浮点值的函数，string 参数也可以以小数点（.）开头，并可以包含 e 或 E 来表示指数部分。
+对那些将字符串转换为整型值的函数，根据基数不同，string 参数可以包含字母符号，对应于大于数字9的数
+
+### 容器适配器
+
+除了顺序容器外，标准库还定义了三个顺序容器适配器：`stack`、`queue`、`priority_queue`
+**适配器**（adaptor）是标准库中的一个通用概念
 
 ## Generic Algorithms
 
-## Associative Containers
+## Associative Containers 关联容器
+
+关联容器支持高效的关键字查找和访问。两个主要的**关联容器**类型是 **map** 和 **set**。
+map 中的元素是一些关键字-值（key-value）对：关键字起到索引的作用，值则表示于索引相关联的数据
+set 中每个元素只包含一个关键字；set 支持高效的关键字查询——检查一个给定的关键字是否在 set 中
+
+### 概述
+
+#### 关键字类型的要求
+
+**使用关键字类型的比较函数**
+
+用来组织一个容器中元素的操作的类型也是该容器的一部分。为了指定使用自定义的操作，必须在定义关联容器类型时提供此操作的类型
+
+定义比较函数
+
+```C++
+bool compareIsbn(const Sales_data &lhs, const Sales_data & rhs) {
+    return lhs.isbn() < rhs.isbn();
+}
+
+multiset<Sales_data, delctype(compareIsbn)*> bookstore(compareIsbn);
+```
+
+为了使用自己定义的操作，在定义 `multiset` 时必须提供两个类型：关键字类型 Sales_data，以及比较操作类型——应该是一种函数指针类型，可以指向 compareIsbn。
+
+### 关联容器操作
+
+#### 关联容器迭代器
+
+**遍历关联容器**
+
+```C++
+auto map_it = word_count.begin();
+while (map_it != word_count.end()) {
+    ....
+    ++map_it;
+}
+```
+
+#### 添加元素
+
+**向 map 添加元素**
+
+对一个 map 进行 insert 操作时，必须记住元素类型是 pair
+
+```C++
+// 向 word_count 插入 word 的 4 种方法
+word_count.insert({word, 1});
+word_count.insert(make_pair(word, 1));
+word_count.insert(pair<string, size_t>(word, 1));
+word_count.insert(map<string, size_t>::value_type(word, 1));
+```
+
+**检测 insert 的返回值**
+
+insert（或 emplace）返回的值依赖于容器类型和参数。对于不包含重复关键字的容器，添加单一元素的 insert 和 emplace 版本返回一个 pair，pair的first 成员是一个迭代器，指向具有给定关键字的元素；second 成员是一个 bool 值，指出元素是插入成功（true）还是已经存在于容器中（false）。
 
 ## Dynamic Memory
 
