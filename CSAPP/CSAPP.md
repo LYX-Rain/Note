@@ -2023,6 +2023,10 @@ extern FILE *stderr;  // Standard error (descriptor 2)
 
 Linux 将网络抽象成文件 I/O，通过写入文件和读取文件实现向网络发送数据和接收数据
 
+### Sockets Interface
+
+
+
 ## Concurrent Programming（并发编程）
 
 如果逻辑控制流在时间上重叠，那么它们就是*并发的*（concurrent）
@@ -2033,3 +2037,17 @@ Linux 将网络抽象成文件 I/O，通过写入文件和读取文件实现向�
 死锁（Deadlock）：有多个流等待永远不会发生的事件
   在信号处理程序中使用 printf
 活锁（Livelock）、饥饿（Starvation）、公平（Fairness）：一直没有得到调度
+
+三种创建并发流的方法：
+
+1. Process-based
+    - Kernel automatically interleaves multiple logical flows
+    - Each flow has its own private address space
+2. Event-based
+   - Programmer manually interleaves multiple logical flows
+   - All flows share the same address space
+   - User technique called I/O multiplexing
+3. Thread-based
+   - Kernel automatically interleaves multiple logical flows
+   - Each flow shares the same address space
+   - Hybrid of process-based and event-based

@@ -497,6 +497,10 @@ multiset<Sales_data, delctype(compareIsbn)*> bookstore(compareIsbn);
 
 为了使用自己定义的操作，在定义 `multiset` 时必须提供两个类型：关键字类型 Sales_data，以及比较操作类型——应该是一种函数指针类型，可以指向 compareIsbn。
 
+#### pair 类型
+
+
+
 ### 关联容器操作
 
 #### 关联容器迭代器
