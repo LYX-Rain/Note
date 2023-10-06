@@ -937,3 +937,40 @@ r = q;  // 给 r 赋值，令它指向另一个地址
 #### 直接管理内存
 
 #### unique_ptr
+
+
+## 单例模式
+
+C++ 的单例就是一个外表为类形式的命名空间
+
+首先不能有 public 的构造函数，因为如果有的话，它就会允许在类外被实例化
+提供一种静态访问该类的方法
+
+```C++
+class Singleton
+{
+public:
+    Singleton(const Singleton&) = delete;   // delete 拷贝构造函数
+    static Singleton& GetInstance() {
+        if (s_Instance == nullptr) {
+            s_Instance = Singleton();
+        }
+        return s_Instance;
+    }
+
+    void Function() {}
+private:
+    Singleton() {}
+
+    static Singleton s_Instance;
+}
+
+
+int main()
+{
+    // 为了禁止拷贝构造一个单例，需要将该类的拷贝构造函数 delete
+    Singleton instance = Singleton::GetInstance();
+
+    Singleton::GetInstance().Function()
+}
+```
