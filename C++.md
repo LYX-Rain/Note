@@ -153,9 +153,115 @@ int arr2[sz];
 
 因为 sizeof 的返回是一个常量表达式，所以可以用  sizeof 的结果声明数组的维度
 
-## Statements
+## Statements 语句
 
-## Funcitons
+### try 语句块和异常处理
+
+异常处理机制为为程序中异常检测和异常处理这两部分的协作提供支持。在 C++ 中，异常处理包括：
+
+- **throw表达式**（throw expression），异常检测部分使用 throw 表达式来表示它遇到了无法处理的问题。我们说throw**引发**（raise）了异常
+- **try语句块**（try block），异常处理部分使用 try 语句块处理异常。try 语句块以关键字 try 开始，并以一个或多个**catch 子句**（catch clause）结束。try 语句块中代码抛出的异常通常会被某个 catch 子句处理。因为 catch 子句“处理”异常，所以它们也被称作**异常处理代码**（exception handler）
+- 一套**异常类**（exception class），用于在 throw 表达式和相关的 catch 子句之间传递异常的具体信息
+
+#### throw 表达式
+
+程序的异常检测部分使用 throw 表达式引发一个异常。throw 表达式包含关键字 throw 和紧随其后的一个表达式，其中表达式的类型就是抛出的异常类型。throw 表达式后面通常紧跟着一个分号，从而构成一条表达式语句。
+
+#### try 语句块
+
+try 语句块的通常语法形式是
+
+```C++
+try {
+    program-statements
+} catch (exception-declaration) {
+    handler-statements
+} catch (exception-declaration) {
+    handler-statements
+} // ...
+```
+
+#### 标准异常
+
+C++ 标准库定义了一组类，用于报告标准库函数遇到的问题。这些异常类也可以在用户编写的程序中使用，它们分别定义在4个头文件中：
+
+- exception 头文件定义了最通用的异常类 exception。它只报告异常的发生，不提供任何额外信息
+- stdexcept 头文件定义了几种常用的异常类，见下表
+- new 头文件定义了 bad_alloc 异常类型
+- type_info 头文件定义了 bad_cast 异常类型
+
+| exception | 最常见的问题 |
+| --- | --- |
+| runtime_error | 只有在运行时才能检测出的问题 |
+| range_error | 运行时错误：生成的结果超出了有意义的值域范围 |
+| overflow_error | 运行时错误：计算上溢 |
+| underflow_error | 运行时错误：计算下溢 |
+| logic_error | 程序逻辑错误 |
+| domain_error | 逻辑错误：参数对应的结果值不存在 |
+| invalid_argument | 逻辑错误：无效参数 |
+| length_error | 逻辑错误：试图创建一个超出该类型最大长度的对象 |
+| out_of_range | 逻辑错误：使用一个超出有效范围的值 |
+
+标准库异常类只定义了几种运算，包括创建或拷贝异常类型的对象，以及为异常类型的对象赋值
+我们只能以默认初始化的方式初始化 exception、bad_alloc和bad_cast 对象，不允许为这些对象提供初始值
+其他类型的行为则恰好相反：应该使用 string 对象或 C 风格字符串初始化这些类型的对象，但是不允许使用默认初始化的方式。当创建此类对象时，必须提供初始值，该初始值含有错误相关的信息
+
+异常类型只定义了一个名为 what 的成员函数，该函数没有任何参数，返回值是一个指向 C 风格的字符串的 const char*。该字符串的目的是提供关于异常的一些文本信息。如果异常类型有一个字符串初始值，则 what 返回该字符串。对于其他无初始值的异常类型来说，what 返回的内容由编译器决定
+
+## Funcitons 函数
+
+函数是命名了的代码块，通过调用函数执行相应的代码
+
+### 函数基础
+
+一个典型的函数定义包括以下部分：返回类型（return type）、函数名字、由0个或多个形参（parameter）组成的列表以及函数体
+
+通过**调用运算符**（call operator）来执行函数。调用运算符的形式是一对圆括号，它作用于一个表达式，该表达式是函数或者指向函数的指针；圆括号之内是一个用逗号隔开的实参（argument）列表，我们用实参初始化函数的形参。调用表达式的类型就是函数的返回类型
+
+
+### 函数指针
+
+函数指针指向的是函数而非对象。和其他指针一样，函数指针指向某种特定类型。函数的类型由它的返回类型和形参类型共同决定，与函数名无关
+
+```C++
+// 比较两个 string 对象的长度
+bool lengthCompare(const string&, const string&);
+```
+
+该函数的类型是 `bool(const string&, const string&)`。想要声明一个可以指向该函数的指针，只需要用指针替换函数名即可：
+
+```C++
+// pf 指向一个函数，该函数的参数是两个 const string 的引用，返回值是 bool 类型
+bool (*pf)(const string&, const string&); // 未初始化
+```
+
+从声明的名字开始观察，pf 前面有个*，因此 pf 是指针；右侧是形参列表，表示  pf 指向的是函数；再观察左侧，发现函数的返回类型是布尔值
+
+*pf 两端的括号必不可少。如果不写这对括号，则 pf 是一个返回值为 bool 指针的函数：
+
+```C++
+// 声明一个名为 pf 的函数，该函数返回 bool*
+bool *pf(const string&, const string&);
+```
+
+#### 使用函数指针
+
+当我们把函数名作为一个值使用时，该函数自动地转换成指针：
+
+```C++
+pf = lengthCompare;     // pf 指向名为 lengthCompare 的函数
+pf = &lengthCompare;    // 等价的赋值语句：取地址符是可选的
+```
+
+此外，还能直接使用指向函数的指针调用该函数，无须提前解引用指针：
+
+```C++
+bool b1 = pf("hello", "goodbye");           // 调用 lengthCompare 函数
+bool b2 = (*pf)("hello", "goodbye");        // 一个等价的调用
+bool b3 = lengthCompare("hello", "goodbye");// 另一个等价的调用
+```
+
+在指向不同函数类型的指针间不存在转换规则。但是可以为函数指针赋一个 `nullptr` 或者值为0的整数常量表达式，表示该指针没有指向任何一个函数
 
 ## Classes
 
