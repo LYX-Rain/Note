@@ -819,7 +819,7 @@ void __wrap_free(void *ptr)
 #endif
 ```
 
-## Exceptional Control Flow
+## Exceptional Control Flow(ECF) 异常控制流
 
 指令序列称为控制流（control flow）
 改变控制流的机制：
@@ -1168,11 +1168,16 @@ fork 只是创建的子进程只是父进程的一个精确副本，运行相同
 
 #### 加载并运行程序
 
+`execve` 函数在当前进程的上下文中加载并运行一个程序
+
 ```C
 int execve(char *filename, char *argv[], char *envp[])
 ```
 
-该函数在当前流程中加载并运行传入的第一个参数可执行文件
+`execve` 函数加载并运行可执行目标文件 `filename`，且带参数列表 `argv` 和环境变量列表 `envp`。只有当出现错误时，例如找不到 `filename`，`execve` 才会返回到调用程序。所以，与 `fork` 一次调用返回两次不同，`execve` 调用一次并从不返回
+
+`argv` 变量指向一个以 `null` 结尾的指针数组，其中每个指针都指向一个参数字符串。按照惯例，`argv[0]` 是可执行目标文件的名字。环境变量列表是由一个类似的数据结构表示的。`envp` 变量指向一个以 `null` 结尾的指针数组，其中每个指针指向一个环境变量字符串，每个字符串都是形如“name=value”的名字-值对
+
 Loads and runs in the current process:
 - Executable file **filename**
   - Can be object file or script file beginning with #!interpreter(e.g., #!/bin/bash)
@@ -1180,6 +1185,16 @@ Loads and runs in the current process:
   - By convention argv[0]==filename
 - and environment variable list **envp**
   - "name=value" strings
+
+在 `execve` 加载了 `filename` 之后，它调用启动代码。启动代码设置栈，并将控制传递给新程序的主函数，该主函数有如下形式的原型
+
+```C
+int main(int argc, char **argv, char **envp);
+// 或者等价的
+int main(int argc, char *argv[], char *envp[]);
+```
+
+![](images/Structure%20of%20the%20stack%20when%20a%20new%20program%20starts.png)
 
 execve 所有代码、数据和堆栈会完全覆盖虚拟地址空间，一旦在一个进程中调用 execve 它会打破当前的程序，但它仍然是原来的进程，会保留PID
 overwrites code, data, and stack
@@ -1776,6 +1791,41 @@ execve 函数在当前进程中加载并运行包含在可执行目标文件 a.o
 下一次调度这个进程时，它将从这个入口点开始执行。Linux 将根据需要换入代码和数据页面
 
 ![](./images/execve%20map%20memory.png)
+
+#### 使用 mmap 函数的用户级内存映射
+
+Linux 进程可以使用 `mmap` 函数来创建新的虚拟内存区域，并将对象映射到这些区域中
+
+```C
+#include <unistd.h>
+#include <sys/mman.h>
+
+void *mmap(void *start, size_t length, int prot, int flags, int fd, off_t offset);
+// 返回：若成功则为指向映射区域的指针，若出错则为 MAP_FAILED(-1)
+```
+
+`mmap` 函数要求内核创建一个新的虚拟内存区域，最好是从地址 `start` 开始的一个区域，并将文件描述符 `fd` 指定的对象的一个连续的片（chunk）映射到这个新的区域。连续的对象片大小为 `length` 字节，从距文件开始处偏移量为 `offset` 字节的地方开始。`start` 地址仅仅是一个暗示，通常被定义为 NULL
+
+参数 `prot` 包含描述新映射的虚拟内存区域的访问权限位（即在相应区域结构中的 `vm_prot` 位）
+
+- `PROT_EXEC`：这个区域内的页面由可以被CPU执行的指令组成
+- `PROT_READ`：这个区域内的页面可读
+- `PROT_WRITE`：这个区域内的页面可写
+- `PROT_NONE`：这个区域内的页面不能被访问
+
+参数 `flag` 由描述被映射对象类型的位组成。如果设置了 `MAP_ANON` 标记位，那么被映射的对象就是一个匿名对象，而相应的虚拟页面是请求二进制零的。`MAP_PRIVATE` 表示被映射的对象是一个私有的、写时复制的对象，而 `MAP_SHARED` 表示是一个共享对象。例如
+
+> bufp = Mmap(NULL, size, PROT_READ, MAP_PRIVATE|MAP_ANON, 0, 0);
+
+让内核创建一个新的包含 `size` 字节的只读、私有、请求二进制零的虚拟内存区域。如果成功调用，那么 `bufp` 包含新区域的地址
+
+`munmap` 函数删除虚拟内存的区域
+
+```C
+int munmap(void *start, size_t length);
+```
+
+`munmap` 函数删除从虚拟地址 `strat` 开始的，由接下来 `length` 字节组成的区域。接下来堆已删除区域的引用会导致段错误
 
 ### 动态内存分配
 
