@@ -2347,13 +2347,29 @@ extern FILE *stderr;  // Standard error (descriptor 2)
 
 ## Network Programming
 
+### 客户端-服务器编程模型
+
+每个网络应用都是基于**客户端-服务器模型**的。采用这个模型，一个应用是由一个**服务器**进程和一个或者多个**客户端**进程组成。
+
+客户端-服务器模型中的基本操作是**事务**（transaction）
+
+### 网络
+
 ![](images/Hardware%20Organization%20of%20a%20Network%20Host.png)
 
 Linux 将网络抽象成文件 I/O，通过写入文件和读取文件实现向网络发送数据和接收数据
 
-### Sockets Interface
+一个插到 I/O 总线扩展槽的适配器提供了到网络的物理接口。从网络上接受到的数据从适配器经过 I/O 和内存总线复制到内存，通常是通过 DMA 传送。相似地，数据也能从内存复制到网络
 
+### 全球 IP 因特网
 
+### Sockets Interface 套接字接口
+
+**套接字接口***（socket interface）是一组函数，它们和 Unix I/O 函数组合起来，用以创建网络应用。下图给出了一个典型的客户端-服务器事务的上下文中的套接字接口概述
+
+![](images/Socket%20Interface.png)
+
+#### 套接字地址结构
 
 ## Concurrent Programming（并发编程）
 
