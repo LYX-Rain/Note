@@ -2375,6 +2375,40 @@ Linux 将网络抽象成文件 I/O，通过写入文件和读取文件实现向�
 
 因特网的套接字地址存放在类型为 `sockaddr_in` 的 16字节结构中。对于因特网应用，`sin_family` 成员是 `AF_INET`，`sin_port` 成员是一个 16 位的端口号，而 `sin_addr` 成员就是一个 32 位的IP地址。IP地址和端口号总是以网络字节顺序（大端法）存放的
 
+```C
+// IP socket address structure
+struct sockaddr_in {
+    uint16_t        sin_family;   // Protocol family (always AF_INET)
+    uint16_t        sin_port;     // Port number in network byte order
+    struct in_addr  sin_addr;     // IP address in network byte order
+    unsigned char   sin_zero[8];  // Pad to sizeof (struct sockaddr)
+};
+
+// Generic socket address structure (for connect, bind, and accept)
+struct sockaddr {
+    uint16_t  sa_family;    // Protocol family
+    char      sa_data[14];  // Address data
+}
+```
+
+注：`_in` 后缀是 Internet 的缩写，而不是 Input 的缩写
+
+connect、bind 和 accept 函数要求一个指向与协议相关的套接字地址结构的指针
+
+#### socket 函数
+
+客户端和服务器使用 `socket` 函数来创建一个**套接字描述符**（socket descriptor）
+
+```C
+#include <sys/types.h>
+#include <sys/socket.h>
+
+int socket(int domain, int type, int protocol);
+// 返回：若成功则为非负描述符，若出错则为 -1
+```
+
+
+
 ## Concurrent Programming（并发编程）
 
 如果逻辑控制流在时间上重叠，那么它们就是*并发的*（concurrent）

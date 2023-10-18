@@ -1,4 +1,67 @@
 
+## 推理引擎 Kernel 优化
+
+### Im2Col Optimizer Im2Col 优化算法
+
+Im2col 是计算机视觉领域中将图片转换成矩阵的矩阵列（column）的计算过程
+
+由于二维卷积的计算比较复杂，不易优化，因此在 AI 框架早期，Caffe 使用 Im2col方法将三维张量转换为二维矩阵，从而充分利用已经优化好的 GEMM 库来为各个平台加速卷积计算。最后，再将矩阵乘得到的二维矩阵结果使用Col2Im 转换为三维矩阵输出
+
+Tensor（NHWC）-- Im2Col --> GEMM -- Col2Im--> Tensor(NHWC)
+
+Im2Col + Matmul 方法主要包括两个步骤：
+
+1. 使用 Im2col 将输入的高维矩阵展开为一个二维大矩阵，矩阵每一列表示卷积核需要的一个输入数据
+2. 使用上面转换的矩阵进行 Matmul 运算，得到的数据就是最终卷积计算的结果
+
+Img2col 是一种比较朴素的卷积优化算法，在没有精心处理的情况下会带来较大的内存开销。空间组合（Spatial pack）是一种类似矩阵乘中重组内存的优化算法
+
+**空间组合优化算法**：是一种基于分治法（Divide and Conquer）的方法，基于空间特性，将卷积计算划分为若干份，分别处理
+
+将输入的大Feature Map 根据卷积核Windows的大小和Stride，划分成 Unpack 层中多个小的 Feature Map，将小的Feature Map 和权重进行卷积得到多个数据输出。最后将多个输出组合成原始输出
+
+划分过程中计算总量不变，但计算小矩阵时访存局部性更好，可以借由计算机存储层次结构获得性能提升
+
+但是这种方式 padding 会引起额外的内存开销
+
+### Winograd 算法
+
+Winograd 算法已广泛应用于各种推理引擎中，其在卷积优化中的应用的基本方法和矩阵乘中应用类似，通过技巧性的矩阵计算变换，减少计算过程所需的乘法数量
+
+conv计算过程中，往往 stride < kernel_size，所以最后转换的矩阵乘中往往有规律的分布着大量的重复元素，可以通过数学方法提取出可以复用的计算，从而加速整个卷积
+
+Winograd 算法不推荐在单个小局部二维卷积中使用，产生的辅助矩阵规模过大，得不偿失
+存储辅助矩阵带来额外的内存开销和瓶颈
+Winograd 算法通过减少乘法次数来实现提速，但加法的数量会相应增加，同时需要额外的转换计算以及存储转换矩阵，随着卷积核和分块的尺寸增大，就需要考虑加法、转换计算和存储的代价，而且 tile 越大，转换矩阵越大，计算精度的损失会进一步增加，所以 Winograd 算法只适用于较小的卷积核和 tile
+
+### QNNPack 间接优化算法
+
+每个算子下面底层可能会对接多个 kernel，实际执行过程中，由runtime 决定具体执行哪个kernel，同一个算子在不同场景下可能会执行到不同的 kernel
+
+QNNPACK（Quantized Neural Networks PACKage）是 Marat Dukhan（Facebook）开发的专门用于量化神经网络计算的加速库，其卓越的性能表现击败了几乎全部已公开的加速算法
+
+在计算矩阵相乘时，传统的优化方法是在 K 维度上拆分，在一次计算 kernel 处理中，仅计算 K 维的局部。那么在每次计算 Kernel 的处理中，都会发生对输出的加载和存储
+
+![](images/Im2col.png)
+
+#### QNNPACK 算法思想
+
+QNNPACK　做法是将整个 K 维全部计算在 Kernel 中处理完，消除了输出部分和的访存。这里所说的“将整个 K 维全部”并不是指 K 维不进行拆分，而是指拆分后不和其他维度交换，实际计算中 K 维会已 $ 2^n $ 为基础进行拆分
+
+![](images/QNNPACK.png).
+
+为了解决Im2col 占用大量额外的内存和需要对输入进行额外的数据拷贝的问题，间接卷积算法提出间接缓冲区（Indirect Buffer），对内存重新组织（Repacking）以改善高速缓存命中率，从而提高性能
+
+#### Indirect Convolution Algorithm 工作流程
+
+Indirect 算法在*输入缓冲区*基础上构建*间接缓冲区（Indirect Buffer），在网络运行时，每次从输入中取出一小块数据放入缓存区，并重新排布内存，缓冲区于kernel计算后放入结果矩阵，一直重复这个过程，直到计算完成
+
+### 内存布局
+
+
+
+## Nvidia GPU
+
 ![Alt text](images/AD102.png)
 
 ## GPU 线程机制
@@ -88,3 +151,13 @@ CUDA 跟 NVIDIA 硬件架构的关系
 SM　可以同时保存多个　Block，快速并行的执行
 
 ![Alt text](images/Ada%20GPU%20Architecture.png)
+
+## Tensor Core
+
+CUDA Core：
+
+GPU 并行模式实现深度学习功能过于通用，最常见 Conv/GEMM 操作依旧要被编码成FMA，硬件层面还是需要把数据按：寄存器-ALU-寄存器-ALU-寄存器 方式来回搬运
+
+Tensor Core：
+
+V100 Tensor Core 提供可编程矩阵乘法和累加单元（matrix-multiple-and-accumulate units），可为AI训练和推理提供125 Tensor TFLOPS 算力。V100 包含 640 个 Tensor 内核：每个SM 8 个
