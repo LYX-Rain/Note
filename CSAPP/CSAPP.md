@@ -2438,13 +2438,50 @@ int socket(int domain, int type, int protocol);
 
 构造并发程序最简单的方法就是用进程，使用 fork、exec 和 waitpid 等函数。例如，一个构造并发服务器的自然方法就是，在父进程中接受客户端连接请求，然后创建一个子进程来为每个新客户端提供服务
 
+为每个client生成单独的进程
+
+![](./images/Process-based%20Servers.png)
+
 #### 基于进程的并发服务器
 
-通常服务器会运行很长时间，所以必须要包括一个 `SIGCHILD` 处理程序，来回收僵死（zombie）子进程的资源。因为当 `SIGCHILD` 处理程序执行时，`SIGCHILD` 信号是阻塞的，而 Linux 信号是不排队的，所以 `SIGCHILD` 处理程序必须准备好回收多个僵死子进程的资源
+通常服务器会运行很长的时间，所以必须要包括一个 `SIGCHLD` 处理程序，来回收僵死（zombie）子进程的资源。因为当 `SIGCHLD` 处理程序执行时，`SIGCHLD` 信号是阻塞的，而 Linux 信号是不排队的，所以 `SIGCHLD` 处理程序必须准备好回收多个僵死子进程的资源
 
-父子进程必须关闭它们各自的 connfd 副本。这对父进程而言尤为重要，它必须关闭它的已连接描述符，以避免内存泄漏
+父子进程必须关闭它们各自的 `connfd` 副本，以避免内存泄漏
 
 因为套接字的文件表表项中的引用计数，直到父子进程的 `connfd` 都关闭了，到客户端的连接才会终止
+
+```C
+#include "csapp.h"
+void echo(int connfd);
+
+void sigchld_handler(int sig)
+{ 
+    while (waitpid(-1, 0, WNOHANG) > 0)
+        ;
+    return;
+}
+
+int main(int argc, char **argv)
+{
+    int listenfd, connfd;
+    socklen_t clientlen;
+    struct sockaddr_storage clientaddr;
+
+    Signal(SIGCHLD, sigchld_handler);
+    listenfd = Open_listenfd(argv[1]);
+    while(1) {
+        clientlen = sizeof(struct sockaddr_storage);
+        connfd = Accept(listenfd, (SA *) &clientaddr, &clientlen);
+        if (Fork() == 0) {
+            Close(listenfd); /* Child closes its listening socket */
+            echo(connfd);    /* Child services client */
+            Close(connfd);   /* Child closes connection with client */
+            exit(0);         /* Child exits */
+        }
+        Close(connfd); /* Parent closes connected socket (important!) */
+    }
+}
+```
 
 #### 进程的优劣
 
@@ -2452,8 +2489,92 @@ int socket(int domain, int type, int protocol);
 
 另一方面，独立的地址空间是的进程共享状态信息变得更加困难。为了共享信息，它们必须使用显式的 IPC（进程间通信）机制。这就导致它们往往比较慢，因为进程控制和IPC的开销很高
 
+### 基于 I/O 多路复用的并发编程
+
+核心思想是服务器维护一组活动连接，它有一系列来自不同客户端的连接文件描述符
+
+它确定了哪些描述符有待处理的输入（可以通过 select 或 epoll做到）
+
+- Server maintains set of active connections
+  - Array of connfd’s
+- Repeat:
+  - Determine which descriptors (connfd’s or listenfd) have pending inputs
+    - e.g., using select or epoll functions
+    - arrival of pending input is an event 到来的输入被称作事件，因为它改变了描述符的状态
+  - If listenfd has input, then accept connection 如果监听到有输入，则服务器调用 accept 接受连接
+    - and add new connfd to array
+  - Service all connfd’s with pending inputs 对于所有有待输入的连接描述符，以某种顺序，通过读取来提供服务
+
+
+在一个描述符数组里记录每个描述符连接和符号，然后使用 select 或 epoll 或其他一些机制，以某种方式确定哪些活动描述符有输入，然后为其提供服务
+
+select 函数会要求内核挂起进程，只有在一个或多个 I/O 事件发生后，才将控制权返回给应用程序
+
+```C
+#include <sys/select.h>
+
+int select(int n, fd_set *fdset, NULL, NULL, NULL); // 返回已准备好的描述符的非零的个数，若出错则为-1
+
+FD_ZERO(fd_set *fdset);           // Clear all bits in fdset
+FD_CLR(int fd, fd_set *fdset);    // Clear bit fd in fdset
+FD_SET(int fd, fd_set *fdset);    // Turn on bit fd in fdset
+FD_ISSET(int fd, fd_set *fdset);  // Is bit fd in fdset on?
+```
+
+select 函数有两个输入：一个称为**读集合**的描述符集合（fdset）和该读集合的基数（n）（实际上是任何描述符集合的最大基数）。select 函数会一直阻塞，直到读集合中至少有一个描述符准备好可以读。当且仅当一个从该描述符读取一个字节的请求不会阻塞时，描述符 k 就表示**准备好可以读了**。
+
+select 有一个副作用，它修改参数 fdset 执行的 fd_set，指明读集合的一个子集，称为**准备好集合**（ready set），这个集合是由读集合中准备好可以读了的描述符组成的。该函数返回的值指明了准备好集合的基数。由于这个副作用，我们必须每次调用select 时都更新读集合
+
+![](images/IO%20Multiplexed%20Event%20Processing.png)
+
+数据到达描述符，然后我们读取数据，并进行相应的处理，处理返回后再读取下一个描述符的数据。我们在为每个客户端创建单独并发流，同时为这些客户端提供服务，即使它是一个顺序程序，我们也没有使用 fork 
+
+它只有一个地址空间和一个进程，这中结构很简单，可以使用传统的 gdb 来逐步调试
+
+它没有进程或线程控制开销，当为某个描述符提供服务时，正常的开销非常小，唯一的开销就是确定描述符有可用的输入
+
+nodejs、nginx、Tornado 都是使用这种基于事件的方式
+
+#### IO 多路复用技术的优劣
+
+缺点是相对于基于进程的设计，它的程序设计和编码会更复杂
+编写event-based 的服务器中最难的一个方面是，你必须弄清楚处理一个事件需要多少计算量，并且当一个事件需要等待其他其他条件时，需要有能够切换到其他事件而不是阻塞等待的机制。因此编写健壮程序要求更细粒度的代码，这带来了更高的复杂性
+
+另一个缺点是，它是一个顺序程序，无法利用多个核心，因此，event-based 的服务器想要获得更多性能的方法是，复杂该服务器的副本，但是单个服务器无法利用多个核心达到更快
 
 ### 基于线程的并发编程
+
+Process = process context + code, data, and stack
+
+![](images/Traditional%20View%20of%20a%20Process.png)
+
+将 Stack 从虚拟空间中取出来，把它和它的指针以及相关的上下文一起拉出来，称为线程上下文，Stack和线程上下文的组合成称之为线程，其他一切都保持不变
+
+![](./images/Alternate%20View%20of%20a%20Process.png)
+
+A Process With Multiple Threads
+
+多个线程与同一个进程相关联
+- 每个线程有它自己的逻辑控制流
+- 每个线程共享相同的coda、data 和 kernel context（相同的虚拟地址空间）
+- 每个线程有它自己的 stack 用于存放局部变量
+  - but not protected from other threads
+- 每个线程共享主进程id，但有它自己的线程id（TID）
+
+只为每个线程保留不同的线程上下文数据，有一个与该线程关联的堆栈的单独部分
+
+![](images/A%20Process%20With%20Multiple%20Threads.png)
+
+当要从一个线程切换到另一个线程时，没有那么多信息需要保存和恢复（Tread context），这是一种非常低开销的操作
+
+可以将线程视为访问相同代码和数据的并发流池，内核负责调度这些流。线程可以在每个核心上运行，因此可以实现真正的并行性
+
+- Threads associated with process form a pool of peers
+  - Unlike processes which form a tree hierarchy
+
+![](images/Logical%20View%20of%20Threads.png)
+
+实际上，线程所拥有的独立的 stack，也是同一虚拟地址空间的一部分，因此，线程可以访问任何其他线程的 stack，这不是好的行为，但它是可以做到的
 
 **线程**（thread）就是运行在进程上下文中的逻辑流。线程由内核自动调度。每个线程都有它自己的*线程上下文*（thread contest），包括一个唯一的整数*线程ID*（Thread ID，TID）、栈、栈指针、程序计数器、通用的目的寄存器和条件码。所有的运行在一个进程里的线程共享该进程的整个虚拟地址空间
 
@@ -2492,6 +2613,8 @@ void *thread(void *vargp) /* Thread routine */
 ```
 
 主线程声明了一个本地变量 `tid`，可以用来存放对等线程的 ID。主线程通过调用 `pthread_create` 函数创建一个新的对等线程。当 `pthread_create` 的调用返回时，主线程和新创建的对等线程同时运行，并且 tid 包含新线程的 ID。通过调用 `pthread_join`，主线程等待对等线程终止。最后，主线程调用 `exit`，终止当时运行在这个进程中的所有线程
+
+![](images/Execution%20of%20Threaded%20“hello,%20world”.png)
 
 #### 创建线程
 
@@ -2573,10 +2696,16 @@ int pthread_once(pthread_once_t *once_control, void (*init_routine)(void));
 
 `once_control` 变量是一个全局或者静态变量，总是被初始化为 `PTHREAD_ONCE_INIT`。当第一次使用参数 `once_control` 调用 `pthread_once` 时，它调用 `init_routine`，这是一个没有输入参数、也不返回什么的函数。接下来的以 `once_control` 为参数的 `pthread_once` 调用不做任何事情。无论如何，当需要动态初始化多个线程共享的全局变量时，`pthread_once` 函数是很有用的
 
-
 ### 多线程程序中的共享变量
 
-为了理解 C 程序中的一个变量是否是共享的，有一些基本的问题要解答：1）线程的基础内存模型是什么？2）根据这个模型，变量实例是如何映射到内存的？3）最后，有多少线程引用这些实例？一个变量是*共享*的，当且仅当多个线程引用这个变量的某个实例
+为了理解 C 程序中的一个变量是否是共享的，有一些基本的问题要解答：
+
+1. 线程的基础内存模型是什么？
+2. 根据这个模型，变量实例是如何映射到内存的？
+3. 最后，有多少线程引用这些实例？
+
+Def: A variable x is shared if and only if multiple threads reference some instance of x
+一个变量是*共享*的，当且仅当多个线程引用这个变量的某个实例
 
 以以下代码为例，尽管有些人为的痕迹，但是它仍然值得研究，因为它说明了关于共享的许多细微之处。示例程序由一个创建了两个对等线程的主线程组成。主线程传递一个唯一的ID给每个对等线程，每个对等线程利用这个ID输出一条个性化的信息，以及调用该线程例程的总次数
 
@@ -2630,6 +2759,8 @@ void *thread(void *vargp)
 - 本地静态变量
   - 定义在函数内部并且有 static 属性的变量。和全局变量一样，虚拟内存的读/写区域只包含在程序中声明的每个本地静态变量的一个实例
 
+![](images/Mapping%20Variable%20Instances%20to%20Memory.png)
+
 #### 共享变量
 
 我们说一个变量 v 是**共享的**，当且仅当它的一个实例被一个以上的线程引用
@@ -2643,6 +2774,7 @@ void *thread(void *vargp)
 #### 信号量
 
 Edsger Dijkstra，并发编程领域的先锋人物，提出了一种经典的解决同步不同执行线程问题的方法，这种方法是基于一种叫做**信号量**（semaphore）的特殊类型变量的。信号量 `s` 是具有非负整数值的全局变量，只能由两种特殊的操作来处理，这两种操作称为 `P` 和 `V`：
+
 - `P(s)`：
   - 如果 `s` 是非零的，那么 `P` 将 `s` 减1，并且立即返回。如果 `s` 为零，那么就挂起这个线程，直到 `s` 变为非零
   - 一个 `V` 操作会重启这个线程。在重启之后，`P` 操作将 `s` 减1，并将控制返回给调用者
@@ -2667,3 +2799,45 @@ int sem_post(sem_t *s); /* V(s) */
 `sem_init` 函数将信号量 `sem` 初始化为 `value`。每个信号量在使用前必须初始化。针对我们的目的，中间的参数总是零。程序分别通过调用 `sem_wait` 和 `sem_post` 函数来执行 `P` 和 `V` 操作
 
 Note：P 和 V 来源于荷兰语单词 Proberen(测试) 和 Verhogen(增加)
+
+初始化为 1 的信号量被称为互斥锁，使用P、V操作将对共享变量的操作包围起来，以实现线程同步
+
+#### 使用信号量来实现互斥
+
+信号量提供了一种很方便的方法来确保对共享变量的互斥访问。基本思想是将每个共享变量（或者一组相关的共享变量）与一个信号量 s（初始为 1）联系起来，然后用 P(s) 和 V(s) 操作将相应的临界区包围起来
+
+以这种方式来保护共享变量的信号量叫做**二元信号量**（binary semaphore），因为它的值总是 0 或者 1.以提供互斥为目的的二元信号量常常也称为**互斥锁**（mutex）
+
+在一个互斥锁上执行 P 操作称为对互斥锁**加锁**，执行 V 操作称为对互斥锁**解锁**。对一个互斥锁加了锁但是还没有解锁的线程称为**占用**这个互斥锁
+
+一个被用作一组可用资源的计数器的信号量被称为**计数信号量**
+
+```C
+volatile long cnt = 0;
+sem_t mutex;
+
+Sem_init(&mutex, 0, 1); // 在主例程中将 mutex 初始化为 1
+
+// 把线程例程中对共享变量 cnt 的更新用 P 和 V 操作包围起来
+for (int i = 0; i < niters; i++) {
+    P(&mutex);
+    cnt++;
+    V(&mutex);
+}
+
+```
+
+因为 P 和 V 是系统调用，因此，P V 操作是有较大的开销的
+
+#### 利用信号量来调度共享资源
+
+一个线程用信号量操作来通知另一个线程，程序状态中的某个条件已经为真了。两个经典的例子是**生产者-消费者**和**读者-写者**问题
+
+**生产者-消费者问题**
+
+生产者和消费者线程共享一个有 n 个槽的有限缓冲区。生产者线程反复地生成新地**项目**（item），并把它们插入到缓冲区中。消费者线程不断地从缓冲区中取出这些项目，然后消费（使用）它们
+
+Common synchronization pattern:
+- Producer waits for empty slot, inserts item in buffer, and notifies consumer
+- Consumer waits for item, removes it from buffer, and notifies producer
+
