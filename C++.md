@@ -427,9 +427,57 @@ Sales_data(const std::string &s) : bookNo(s) {}
 
 在参数列表和花括号之间的部分称为**构造函数初始化列表**（constructor initialize list），它负责为新创建的对象的一个或几个数据成员赋初值。构造函数初始值是成员名字的一个列表，每个名字后面紧跟括号括起来的成员初始值
 
+如果没有在构造函数的初始值列表中显示地初始化成员，则该成员将在构造函数体之前执行默认初始化
+
+如果成员是 `const`、引用，或者属于某种未提供默认构造函数的类类型，必须通过构造函数初始值列表为这些成员提供初值
+
+构造函数初始值列表只说明用于初始化成员的值，而不限定初始化的具体执行顺序。成员初始化顺序与它们在类定义中的出现顺序一致。构造函数初始值列表中初始值的前后位置关系不会影响实际的初始化顺序
+
+一般来说，初始化顺序没有特别要求，但如果一个成员是用另一个成员来初始化的，那么这两个成员的初始化顺序就很关键了
+
+```C++
+class X {
+    int i;
+    int j;
+public:
+    // 未定义的：i 在 j 之前被初始化
+    X(int val) : j(val), i(j) {}
+};
+```
+
+最好令构造函数初始值的顺序与成员声明的顺序保持一致
+
+如果一个构造函数为所有参数都提供了默认实参，则它实际上也定义了默认的构造函数
+
+#### 委托构造函数
+
+C++11 新标准扩展了构造函数初始值的功能，使可以定义**委托构造函数（delegating constructor）**。一个委托构造函数使用它所属类的其他构造函数执行它自己的初始化过程，或者说它把自己的一些职责委托给了其他构造函数
+
 #### 拷贝、赋值和析构
 
-除了定义类的对象如何初始化之外，类还需要控制拷贝、赋值和销毁对象时发生的行为
+除了定义类的对象如何初始化之外，类还需要控制拷贝、赋值和销毁对象时发生的行为。
+对象在几种情况下会被拷贝：初始化变量以及以值的方式传递或返回一个对象。
+
+如果不主动定义这些操作，则编译器将替我们合成它。一般来说，编译器生成的版本将对对象的每个成员执行拷贝、赋值和销毁操作
+
+#### 友元
+
+类可以允许其他类或者函数访问它的非公有成员，方法是令其他类或者函数成为它的**友元（friend）**
+把一个函数作为它的友元只需要增加一条以 `friend` 关键字开始的函数声明即可：
+
+友元声明只能出现在类定义的内部。友元不是类的成员也不受它所在区域访问控制级别的约束
+
+友元的声明仅仅指定了访问的权限，而非一个通常意义上的函数声明。如果希望类的用户能够调用某个友元函数，那么就必须在友元声明之外再专门对函数进行一次声明。
+
+为了使友元对类的用户可见，通常把友元的声明与类本身放置在同一个头文件中（类的外部）
+
+### 类的其他特性
+
+定义在类内部的成员函数自动是 `inline` 的
+
+可变数据成员
+有时希望在 const 成员函数内能修改类的某个成员函数，可以通过在变量的声明中加入 `mutable` 关键字。
+一个**可变数据成员**永远不会是 const，即使它是 const 对象的成员
 
 ### 访问控制与封装
 
@@ -1020,4 +1068,491 @@ int main()
 
     Singleton::GetInstance().Function()
 }
+```
+
+## 多线程同步
+
+### 多线程的两个主要用途
+
+1. 保护共享数据(Protecting shared data from concurrent access)
+2. 同步并行操作(Synchronizing concurrent operations)
+
+### 保护共享数据(Protecting shared data from concurrent access)
+
+一般我们用互斥锁(mutual exclusion, mutex)来保护共享数据. 比如在一些场景下, 有一些线程往共享数据里写数据, 有一些线程从共享数据里读数据. 两个或多个线程读数据完全没问题, 但是我们要防止两个线程同时写数据, 也要防止一个线程在写的同时另一个线程还在读. 否则这样就会发生竞争条件(race condition, 官方翻译是"竞争条件", 但我觉得可以直译成"竞争情况"或者意译成"数据竞争").
+
+### 同步并行操作(Synchronizing concurrent operations)
+
+这篇文章我们主要关注同步并行操作. 同步并行的意思是有可能我们会同时运行不同的事件(event), 我们需要协调他们的发生顺序, 比如一个线程必须要等另一个线程完成它的工作才能进行这个线程本身的下一部分工作.
+
+大部分这样类型的问题都可以总结成生产者和消费者模式(producer-consumer pattern): 消费者需要等待生产者生产数据, 并且等待某种条件成真. 生产者生产数据并且改变那种条件.
+
+### 同步并行操作的三种方法
+
+在同步并行操作, 也就是在生产者和消费者模式里, 让消费者等待生产者设定的某个条件, 可以用三种方法完成:
+
+1. 周期性检查条件(最简单但是最差的实现方法)
+2. 使用条件变量(condition variables)
+3. 使用futures和promises(理解起来比较复杂, 但有些场景可以很方便)
+
+#### 方法1: 周期性检查条件
+
+这是一个最简单但是最不好的方法, 看看它的优缺点:
+
+优点: 容易理解
+
+缺点:
+
+- 消耗大量资源周期性检查(CPU使用率可能会飙升到100%)
+- 不必要地周期性唤醒线程
+- 垃圾设计
+
+我们从一个简单的生产者消费者案例说起. 假如一个场景我们有一个送快递的线程(生产者), 和一个签收的线程(消费者). 消费者等待生产者的那个"条件", 就是快递是否准备好被接收了.
+
+代码框架可以这样:
+
+```C++
+struct Packet {
+  int id;
+};
+
+std::mutex m;
+std::queue<Packet> packet_queue;
+
+//生产者 - 生成快递包裹
+void parcel_delivery() {}
+
+//消费者 - 签收包裹
+void recipient() {}
+
+int main() {
+  // 启动生产者和消费者线程
+}
+```
+
+最原始的用互斥锁(mutex)的代码实现怎么写:
+
+```C++
+#include <chrono>
+#include <iostream>
+#include <mutex>
+#include <queue>
+#include <ratio>
+#include <thread>
+
+struct Packet {
+  int id;
+};
+
+std::mutex m;
+std::queue<Packet> packet_queue;
+
+//生产者 - 生成快递包裹
+void parcel_delivery() {
+  // 周期性地生产"包裹"
+  int packet_id = 0;
+  while (true) {
+    // 等待一段时间再投送
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    Packet new_packet{packet_id};
+    {
+      //使用lock_guard锁住这段括号{}以内的共享数据, 走出{}段落后会自动解锁
+      //为什么用lock_guard? 这段代码即使出错, throw了, 这个段落结束后也会解锁,
+      //从而避免死锁(Dead lock)
+      std::lock_guard<std::mutex> l{m};
+      std::cout << "Work is done and packet id [" << packet_id << "] is ready"
+                << std::endl;
+      packet_queue.push(new_packet);
+    }
+    packet_id++;
+  }
+}
+
+//消费者 - 签收包裹
+void recipient() {
+  while (true) {
+    {
+      //使用lock_guard锁住这段括号{}以内的共享数据, 走出{}段落后会自动解锁
+      std::lock_guard<std::mutex> l{m};
+
+      //当共享数据queue里的包裹准备了, 就可以取出包裹了
+      if (!packet_queue.empty()) {
+        auto new_packet = packet_queue.front();
+        packet_queue.pop();
+        std::cout << "Received new packet with id: [" << new_packet.id << "]. ["
+                  << packet_queue.size() << "] packets remaining" << std::endl;
+      }
+    }
+    //这里消费者就疯狂周期性地加锁并且访问数据, 会导致CPU使用率飙升
+    //为了避免这种情况, 每次结束后稍微休息一会, 但这方式治标不治本
+    //还是没法避免周期性地唤醒这个线程
+    //最倒霉情况还会完整睡上100ms才能拿到数据
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+}
+
+int main(int argc, const char** argv) {
+  // 启动生产者和消费者线程
+  std::thread producing_thread(parcel_delivery);
+  std::thread consuming_thread(recipient);
+  producing_thread.join();
+  consuming_thread.join();
+  return 0;
+}
+```
+
+方法2: 使用条件变量(conditional variable)
+看看条件变量的优缺点:
+
+优点:
+
+不浪费CPU资源
+条件变量可以多次使用 (和后面要说的futures的一次使用对比)
+缺点:
+
+需要考虑无效唤醒(spurious wakeups)
+需要考虑丢失唤醒(lost wakeups)
+典型使用场景:
+
+网络检测线程: 周期性检查数据, 通知工作线程
+
+文件检查线程: 周期性检查文件, 通知工作线程
+
+总结一下就是需要做通知的时候用. 所以我们的快递包裹和签收也符合这种使用场景, 我们需要快递线程通知签收线程.
+
+```C++
+#include <chrono>
+#include <condition_variable>
+#include <iostream>
+#include <mutex>
+#include <queue>
+#include <thread>
+
+struct Packet {
+  int id;
+};
+
+std::condition_variable cond_var;
+std::mutex m;
+
+std::queue<Packet> packet_queue;
+
+//生产者 - 生成快递包裹
+void parcel_delivery() {
+  // 周期性地生产"包裹"
+  int packet_id = 0;
+  while (true) {
+    // 等待一段时间再投送
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    Packet new_packet{packet_id};
+    {
+      //使用lock_guard锁住这段括号{}以内的共享数据, 走出{}段落后会自动解锁
+      //为什么用lock_guard? 这段代码即使出错, throw了, 这个段落结束后也会解锁,
+      //从而避免死锁(Dead lock)
+      std::lock_guard<std::mutex> l{m};
+      std::cout << "Work is done and packet id [" << packet_id << "] is ready"
+                << std::endl;
+      packet_queue.push(new_packet);
+    }
+    packet_id++;
+    cond_var.notify_one();
+  }
+}
+
+//消费者 - 签收包裹
+void recipient() {
+  while (true) {
+    //这里注意我们用了unique_lock, 下面会详细讨论一下
+    std::unique_lock<std::mutex> lock{m};
+
+    //这里的lambda函数必须是一个predicate, 也就是必须要返回true/false的函数
+    cond_var.wait(lock, []() { return !packet_queue.empty(); });
+
+    auto new_packet = packet_queue.front();
+    packet_queue.pop();
+    std::cout << "Received new packet with id: [" << new_packet.id << "]. ["
+              << packet_queue.size() << "] packets remaining" << std::endl;
+  }
+}
+
+int main(int argc, const char** argv) {
+  // 1: Start two threads: Producer and consumer
+  std::thread producing_thread(parcel_delivery);
+  std::thread consuming_thread(recipient);
+  producing_thread.join();
+  consuming_thread.join();
+  return 0;
+}
+```
+
+把mutex传递给conditional variable这个过程中发生了什么?
+
+```C++
+{
+    //锁上mutex
+    std::unique_lock<std::mutex> lock{m};
+
+    //这里在等待(wait)的时候, 其实是会解锁mutex, 并且等待条件满足后再重新锁上mutex
+    //这样就保证了这个线程不会空转或者等待, 从而不消耗cpu资源
+    cond_var.wait(lock, some_predicate_function);
+
+    //操作一些被mutex保护的共享数据
+
+    //手动解锁mutex, 如果不管, 在{}结束的时候也会解锁
+    lock.unlock();
+}
+```
+
+conditional variable在wait的时候, 底层发生了什么?
+
+实际上调用wait之后, 里面操作系统层面线程库(operating system threading lib)里的操作是这样的:
+
+1. 解锁mutex
+2. 把当前线程放到一个等待队列(queue of wait threads)
+3. 当收到通知notify_one的时候, 等待队列就会把一个线程释放出来
+4. 当收到通知notify_all的时候, 等待队列就会把所有线程释放出来
+5. 重新锁上mutex
+6. 所以这样这个线程才没有占用CPU空转消耗资源.
+
+C语言这部分可以怎么写:
+
+```C
+ pthread_mutex_lock(&lock);
+    //如果条件不满足, 开始等待
+    while (!some_predicate_function)
+    {
+        pthread_cond_wait(&cond_var, &lock);
+        //如果被唤醒, 重新上锁后, 就会运行到这里
+        //再次检查while的条件:
+        //如果条件不满足, 继续新一轮等待, 锁又会被释放
+        //如果条件满足, 才跳过while循环直接进行后续数据操作
+    }
+    //操作一些被mutex保护的共享数据...
+    pthread_mutex_unlock(&lock);
+```
+
+##### 无效唤醒(spurious wakeups)
+
+这个词spurious wakeups没有中文翻译但我觉得可以叫无效唤醒, 就是线程被唤醒之后又发现条件不满足, 再次回到等待状态
+
+典型情况就会发生在上面提到的notify_all中:
+
+我们也都能理解如果只需要通知一个线程的时候, 要调用notify_one而不是notify_all. 但看看用notify_all之后会发生什么:
+
+1. 把所有等待队列里的线程都释放出来
+2. 其中一个运气好的线程会拿到锁并且锁上, 检查条件后处理数据
+3. (无效步骤)其他剩下的线程虽然被唤醒了, 但是都在等待解锁并进行下面的步骤
+4. (无效步骤)等第2步中的线程完成工作解锁后, 第3步的其中一个线程拿到锁
+5. (无效步骤)但数据可能已经被第2步的线程处理完了, 这个线程重新检查的条件不满足, 又被加进等待队列(wait queue)
+6. (无效步骤)其他所有线程重复第3到第5步的操作
+
+看看那些无效步骤, 结论就是不要闲着没事notify_all
+
+##### 丢失唤醒(Lost Wakeups)
+
+还有一点需要注意的是我们可能会丢失一些唤醒信号. 比如我们的生产者消费者模型里:
+
+> 生产者线程: cond_var.notify_one();
+> 消费者线程: cond_var.wait(lock, []() { return !packet_queue.empty(); });
+
+生产者和消费者是在两个线程运行的, 所以我们没法确定他们俩的代码的运行顺序. 有可能生产者运行得比较快先调用了notify_one, 但是消费者还没运行到等待这一步. 这一个notify的通知就丢失了. 等到下一个notify的通知它才能继续运行, 或者也有可能永远等不到下一个通知永远结束不了了.
+
+如果像我们之前C语言里的代码, 没有考虑好的话把while写成了if, 丢失唤醒(Lost Wakeups)就有可能发生:
+
+```C
+pthread_mutex_lock(&lock);
+    //这里while改成了if, 可以复现Lost Wakeups
+    if (!some_predicate_function)
+    {
+        //如果运行到这之前notify提前执行了, 这里是不是就永远得不到通知了?
+        pthread_cond_wait(&cond_var, &lock);
+    }
+    pthread_mutex_unlock(&lock);
+```
+
+好在现在C++封装了这部分逻辑不容易写错了:
+
+```C++
+{
+    std::unique_lock<std::mutex> lock{m};
+    //不需要写while再检查条件了
+    cond_var.wait(lock, some_predicate_function);
+}
+```
+
+所以关键点还在于这个predicate检查判断条件, 必须要写好. 我们也可以不把这个判断条件传给wait, 比如就这么写cond_var.wait(lock);也能编译运行, 但显然很容易出现上述问题.
+
+#### 方法3: 使用Future或Promise
+
+除了直接使用线程, 我们还可以用高级一点的Future或者Promise. 没有相关背景知识的话可能还是需要费点力来理解这块. 我们先略扫一下他们的优缺点, 然后一会直接从案例里理解他们.
+
+优点:
+
+1. 不需要直接使用线程(std::thread)
+2. 方便拿到线程运算结果
+3. 没有无效唤醒(spurious wakeups)和丢失唤醒(lost wakeups)的问题
+缺点:
+
+每次只能生成一个事件(one-shot events), 不能像以前线程里那样一个线程不断生成数据或者消费数据
+
+常见使用场景原文没说, 我觉得是在对未知的事件做异步计算的场景可能更有用, 比如处理前端用户不同的请求, 或者分布式计算接收不同的计算请求.
+
+##### Future
+
+首先我们来看看`std::future`. `std::future`本身是一个容器, 它包含了一种可交给未来计算的内容, 这个内容的计算因为会费时间我们延后运行. 我们可以让`std::future`返回一个值, 比如返回`int`, 可以这么写`std::future<int>`. 也可以让`std::future`单纯做计算不返回任何东西, 就可以这样`std::future<void>`.
+
+刚才提过, future和之前两种方法(用mutex或conditional variable)的不同点就是它是一次性的, 每一个future都表示它能做一次计算. 但是好处是我们不需要手动管理线程了, 甚至在我们的代码里都见不到thread这个东西, future自动把计算请求放到额外的一个线程中计算并且等待结果. 这样代码就更容易理解也更好维护了.
+
+因为future的局限性, 光用future本身没法完全复现我们之前准备和接收包裹那样的生产者消费者模型案例. 我们来看看下面的代码案例.
+
+先来一个最简单的例子, 看看怎么用`std::async`得到一个`std::future`并且得到计算结果的:
+
+```C++
+#include <chrono>
+#include <future>
+#include <iostream>
+#include <vector>
+
+struct Packet {
+    int id;
+};
+
+Packet parcel_delivery() {
+    static int packet_id = 0;
+    Packet packet {
+        packet_id
+    };
+    packet_id++;
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    return packet;
+}
+
+int main(int argc, const char ** argv) {
+
+    std::future<Packet> future = std::async(std::launch::async, parcel_delivery);
+
+    std::cout << "Wait for delivery" << std::endl;
+
+    auto new_packet = future.get();
+    std::cout << "Received new packet with id: " << new_packet.id << std::endl;
+
+    return 0;
+}
+```
+
+再改成一个创建多个std::future的例子, 也就是隐式创建了多个线程, 看看他们是怎么并行的：
+
+```C++
+#include <chrono>
+#include <future>
+#include <iostream>
+#include <vector>
+
+
+struct Packet {
+    int id;
+};
+
+Packet parcel_delivery() {
+    static int packet_id = 0;
+    Packet packet {
+        packet_id
+    };
+    packet_id++;
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    return packet;
+}
+
+int main(int argc,
+    const char ** argv) {
+
+    std::vector < std::future < Packet >> list_of_futures;
+    for (int i = 0; i < 10; ++i) {
+        list_of_futures.emplace_back(std::async(std::launch::async, parcel_delivery));
+    }
+
+    std::cout << "Wait for delivery" << std::endl;
+
+    for (auto & future: list_of_futures) {
+        auto new_packet = future.get();
+        std::cout << "Received new packet with id: " << new_packet.id << std::endl;
+    }
+    return 0;
+}
+```
+
+我们可以看到, 用std::async生成了std::future, 之后拿到结果, 完全避免了手动使用mutex和thread.
+
+最后一个问题, 调用std::async和普通的多线程的区别在哪? 每次我们调用std::async, 就会额外生成一个线程吗?
+
+答案是:
+
+如果我们用了std::launch::asyncflag, 比如std::async(std::launch::async, parcel_delivery), 就会额外生成一个线程.
+
+如果我们用了std::launch::deferredflag (推迟的意思), 比如std::async(std::launch::deferred, parcel_delivery), 就不会额外生成一个线程, 只是单纯推迟运算而已.
+
+如果我们什么都不写, 比如std::async(parcel_delivery), 按C++标准, 默认可以用任意一种方式, 但是实际上主流编译器的默认方法都是用std::launch::async, 也就是会额外生成一个线程.
+
+##### Promise
+
+如前面所说, 使用std::async(和std::launch::asyncflag), 每生成一个future就会额外生成一个线程. 所以简化的future的使用场景还是挺有限的. 如果我们就想要一个线程来运行多个future, 我们可能就要考虑结合promise和future了.
+
+std::promise和std::future刚好相反.
+
+使用std::future的时候, 我们把计算函数传给std::async创建出一个std::future(和一个隐藏的线程).
+
+使用std::promise的时候, 我们先创建一个std::promise, 通过std::promise获取一个std::future, 同时声明std::promise用来装载计算函数的结果, 最后把它和计算函数一起放进一个显式的线程做计算.
+
+另一种理解方式是, 我们可以把std::async理解成一个函数, 它能创建一个promise, 把promise放进一个线程, 最后返回这个promise对应的future.
+
+说起来特别绕, 还是直接看下面的最简单的代码案例吧:
+
+```C++
+#include <chrono>
+#include <future>
+#include <iostream>
+#include <thread>
+#include <vector>
+struct Packet {
+  int id;
+};
+
+void parcel_delivery(std::promise<Packet> &&promise) {
+  static int id = 0;
+  Packet packet{id};
+  id++;
+
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  std::cout << "preparing packet with id: " << packet.id << std::endl;
+
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+  std::cout << "ready to deliver packet with id: " << packet.id << std::endl;
+
+  promise.set_value(packet);
+}
+
+int main(int argc, const char **argv) {
+
+  std::promise<Packet> packet_promise;
+  std::future<Packet> future = packet_promise.get_future();
+  std::thread delivery_thread(parcel_delivery, std::move(packet_promise));
+
+  std::cout << "Wait for delivery" << std::endl;
+
+  auto new_packet = future.get();
+  std::cout << "Received new packet with id: " << new_packet.id << std::endl;
+
+  delivery_thread.join();
+
+  return 0;
+}
+
+/*
+输出
+Wait for delivery
+preparing packet with id: 0
+ready to deliver packet with id: 0
+Received new packet with id: 0
+*/
 ```

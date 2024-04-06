@@ -2612,7 +2612,7 @@ void *thread(void *vargp) /* Thread routine */
 }
 ```
 
-主线程声明了一个本地变量 `tid`，可以用来存放对等线程的 ID。主线程通过调用 `pthread_create` 函数创建一个新的对等线程。当 `pthread_create` 的调用返回时，主线程和新创建的对等线程同时运行，并且 tid 包含新线程的 ID。通过调用 `pthread_join`，主线程等待对等线程终止。最后，主线程调用 `exit`，终止当时运行在这个进程中的所有线程
+主线程(main)声明了一个本地变量 `tid`，可以用来存放对等线程的 ID。主线程通过调用 `pthread_create` 函数创建一个新的对等线程。当 `pthread_create` 的调用返回时，主线程和新创建的对等线程同时运行，并且 tid 包含新线程的 ID。通过调用 `pthread_join`，主线程等待对等线程终止。最后，主线程调用 `exit`，终止当时运行在这个进程中的所有线程
 
 ![](images/Execution%20of%20Threaded%20“hello,%20world”.png)
 
@@ -2694,7 +2694,7 @@ int pthread_once(pthread_once_t *once_control, void (*init_routine)(void));
 // 总是返回0
 ```
 
-`once_control` 变量是一个全局或者静态变量，总是被初始化为 `PTHREAD_ONCE_INIT`。当第一次使用参数 `once_control` 调用 `pthread_once` 时，它调用 `init_routine`，这是一个没有输入参数、也不返回什么的函数。接下来的以 `once_control` 为参数的 `pthread_once` 调用不做任何事情。无论如何，当需要动态初始化多个线程共享的全局变量时，`pthread_once` 函数是很有用的
+`once_control` 变量是一个全局或者静态变量，总是被初始化为 `PTHREAD_ONCE_INIT`。当第一次使用参数 `once_control` 调用 `pthread_once` 时，它调用 `init_routine`，这是一个没有输入参数、也不返回什么的函数。接下来的以 `once_control` 为参数的 `pthread_once` 调用不做任何事情。无论如何，**当需要动态初始化多个线程共享的全局变量时，`pthread_once` 函数是很有用的**
 
 ### 多线程程序中的共享变量
 
@@ -2707,7 +2707,7 @@ int pthread_once(pthread_once_t *once_control, void (*init_routine)(void));
 Def: A variable x is shared if and only if multiple threads reference some instance of x
 一个变量是*共享*的，当且仅当多个线程引用这个变量的某个实例
 
-以以下代码为例，尽管有些人为的痕迹，但是它仍然值得研究，因为它说明了关于共享的许多细微之处。示例程序由一个创建了两个对等线程的主线程组成。主线程传递一个唯一的ID给每个对等线程，每个对等线程利用这个ID输出一条个性化的信息，以及调用该线程例程的总次数
+以下代码为例，尽管有些人为的痕迹，但是它仍然值得研究，因为它说明了关于共享的许多细微之处。示例程序由一个创建了两个对等线程的主线程组成。主线程传递一个唯一的ID给每个对等线程，每个对等线程利用这个ID输出一条个性化的信息，以及调用该线程例程的总次数
 
 ```C
 #include "csapp.h"
@@ -2841,3 +2841,12 @@ Common synchronization pattern:
 - Producer waits for empty slot, inserts item in buffer, and notifies consumer
 - Consumer waits for item, removes it from buffer, and notifies producer
 
+![](images/Prethreaded%20Concurrent%20Server.png)
+
+```C
+
+```
+
+#### 可重入性
+
+可重入函数（reentrant function）不会引用任何共享数据
