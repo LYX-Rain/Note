@@ -1332,7 +1332,266 @@ The ioctl() system call manipulates the underlying device parameters of special 
 
 #### 文件系统
 
+UNIX/Linux: Everything is a File
 
+- 一切都在“/”中
+
+mount 将一个目录解析为另一个文件系统根
+
+```
+mount(source, target, filesystemtype, mountflags, data);
+```
+
+- 再看 “最小 Linux”
+- 初始时只有 /dev/console 和几个文件, /proc, /sys, 甚至 /tmp 都没有, 它们都是 mount 系统调用创建出来的
+- UNIX 一贯的设计哲学：灵活
+- Linux 安装时的 “mount point”, `/`, `/home`, `/var` 可以是独立的磁盘设备
+
+如何挂载一个 filesystem.img?
+
+一个微妙的循环
+文件 = 磁盘上的虚拟磁盘
+挂载文件 = 在虚拟磁盘上虚拟出的虚拟磁盘 🤔
+试试镜像文件 .iso
+
+Linux 的处理方式: 创建一个 loopback (回环) 设备
+
+设备驱动把设备的 read/write 翻译成文件的 read/write
+[drivers/block/loop.c](https://elixir.bootlin.com/linux/v6.9.3/source/drivers/block/loop.c) 实现了 loop_mq_ops (不是 file_operations)
+
+观察挂载文件的 strace
+
+lsblk 查看系统中的 block devices (strace)
+strace 观察挂载的流程
+ioctl(3, LOOP_CTL_GET_FREE)
+ioctl(4, LOOP_SET_FD, 3)
+
+Filesystem Hierarchy Standard
+我们看到的目录结构
+
+[FHS](http://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html) enables software and user to predict the location of installed files and directories.
+例子：macOS 是 UNIX 的内核 (BSD), 但不遵循 Linux FHS
+
+文件系统 API: 目录管理
+
+mkdir
+创建目录
+
+rmdir
+删除一个空目录
+没有 “递归删除” 的系统调用
+rm -rf 会遍历目录，逐个删除 (试试 strace)
+
+getdents
+返回 count 个目录项 (ls, find, tree 都使用这个)
+更友好的方式：globbing
+
+硬 (hard) 链接
+
+需求：系统中可能有同一个运行库的多个版本
+libc-2.27.so, libc-2.26.so, ...
+还需要一个 “当前版本的 libc”
+程序需要链接 “libc.so.6”，能否避免文件的一份拷贝？
+
+(硬) 链接：允许一个文件被多个目录引用
+文件系统实现的特性 (ls -i 查看)
+不能链接目录、不能跨文件系统
+删除文件的系统调用称为 “unlink” (refcount--)
+
+软 (symbolic) 链接
+
+软链接：在文件里存储一个 “跳转提示”
+- 软链接也是一个文件
+  - 当引用这个文件时，去找另一个文件
+  - 另一个文件的绝对/相对路径以文本形式存储在文件里
+  - 可以跨文件系统、可以链接目录、……
+
+几乎没有任何限制
+- 类似 “快捷方式”
+- 链接指向的位置不存在也没关系 (也许下次就存在了)
+
+文件系统实现
+
+文件的实现
+文件 = “虚拟” 磁盘
+API: read, write, ftruncate, ...
+
+目录的实现
+目录 = 文件/目录的集合
+API: mkdir, rmdir, readdir, link, unlink, ...
+mount 的实现
+
+最好由操作系统统一管理 (而不是由具体的文件系统实现)
+
+如果是《数据结构》课？
+借助 RAM 自由布局目录和文件
+
+文件系统就是一个 Abstract DataType (ADT)
+
+```C++
+class FSObject {
+};
+
+class File : FSObject {
+  std::vector<char> content;
+};
+
+class Directory : FSObject {
+  std::map<std::string,FSObject*> children;
+};
+```
+
+回到《操作系统》课
+没有 Random Access Memory
+
+我们只有 block device
+两个 API
+- bread(int bid, struct block *b);
+- bwrite(int bid, struct block *b);
+
+实现：
+
+read, write, ftruncate, ...
+mkdir, rmdir, readdir, link, unlink, ...
+  - 用 bread/bwrite 模拟 RAM → 严重的读/写放大
+  - 我们需要更适合磁盘的数据结构
+
+敌人：读/写放大
+
+被迫读写连续的一块数据
+朋友：局部性 + 缓存
+
+适当地排布数据，使得临近的数据有 “一同访问” 的倾向
+数据暂时停留在内存，延迟写回
+
+##### FAT 和 UNIX 文件系统
+
+5.25" 软盘：单面 180 KiB
+360 个 512B 扇区 (sectors)
+在这样的设备上实现文件系统，应该选用怎样的数据结构？
+
+需求分析
+
+相当小的文件系统
+目录中一般只有几个、十几个文件
+文件以小文件为主 (几个 block 以内)
+
+文件的实现方式
+struct block * 的链表
+任何复杂的高级数据结构都显得浪费
+
+目录的实现方式
+目录就是一个普通的文件 (虚拟磁盘；“目录文件”)
+操作系统会对文件的内容作为目录的解读
+文件内容就是一个 struct dentry[];
+
+用链表存储数据：两种设计
+1. 在每个数据块后放置指针
+优点：实现简单、无须单独开辟存储空间
+缺点：数据的大小不是 $ 2^k $ ; 单纯的 lseek 需要读整块数据
+
+2. 将指针集中存放在文件系统的某个区域
+优点：局部性好；lseek 更快
+缺点：集中存放的数据损坏将导致数据丢失
+
+哪种方式的缺陷是致命、难以解决的？
+
+集中保存所有指针
+集中存储的指针容易损坏？存 n 份就行！
+FAT-12/16/32 (FAT entry，即 “next 指针” 的大小)
+![](./images/fat32_layout.webp)
+
+“File Allocation Table” 文件系统
+[RTFM](https://jyywiki.cn/OS/manuals/MSFAT-spec.pdf) 得到必要的细节
+诸如 tutorial、博客都不可靠
+还会丢失很多重要的细节
+
+```C
+if (CountofClusters < 4085) {
+  // Volume is FAT12 (2 MiB for 512B cluster)
+} else if (CountofCluster < 65525) {
+  // Volume is FAT16 (32 MiB for 512B cluster)
+} else {
+  // Volume is FAT32
+}
+```
+
+FAT: 链接存储的文件
+“FAT” 的 “next” 数组
+0: free; 2...MAX: allocated;
+ffffff7: bad cluster; ffffff8-ffffffe, -1: end-of-file
+
+目录树实现：目录文件
+以普通文件的方式存储 “目录” 这个数据结构
+FAT: 目录 = 32-byte 定长目录项的集合
+操作系统在解析时把标记为目录的目录项 “当做” 目录即可
+可以用连续的若干个目录项存储 “长文件名”
+思考题：为什么不把元数据 (大小、文件名、……) 保存在 vector<struct block *> file 的头部？
+
+首先，观察 “快速格式化” (mkfs.fat) 是如何工作的, 老朋友：strace
+
+然后，把整个磁盘镜像 mmap 进内存
+照抄手册，遍历目录树 (fat-tree demo)，试试[镜像](https://box.nju.edu.cn/f/0764665b70a34599813c/?dl=1)
+
+另一个有趣的问题：文件系统恢复
+- 快速格式化 = FAT 表丢失
+  - 所有的文件内容 (包括目录文件) 都还在
+  - 只是在数据结构眼里看起来都是 “free block”
+- 猜出文件系统的参数 (SecPerClus, BytsPerSec, ...)，恢复 next 关系
+
+FAT: 性能与可靠性
+
+性能
+- ＋ 小文件简直太合适了
+- － 但大文件的随机访问就不行了
+  - 4 GB 的文件跳到末尾 (4 KB cluster) 有 $ 2^20 $ 次 next 操作
+  - 缓存能部分解决这个问题
+- 在 FAT 时代，磁盘连续访问性能更佳
+- 使用时间久的磁盘会产生碎片 (fragmentation)
+- malloc 也会产生碎片，不过对性能影响不太大
+
+可靠性
+维护若干个 FAT 的副本防止元数据损坏 (额外的开销)
+
+ext2/UNIX 文件系统
+
+按对象方式集中存储文件/目录元数据
+- 增强局部性 (更易于缓存)
+- 支持链接
+
+为大小文件区分 fast/slow path
+- 小的时候应该用数组
+  - 连链表遍历都省了
+- 大的时候应该用树 (B-Tree; Radix-Tree; ...)
+  - 快速的随机访问
+
+ext2: 磁盘镜像格式
+对磁盘进行分组
+
+“superblock”：文件系统元数据
+
+文件 (inode) 数量
+block group 信息, [ext2.h](https://elixir.bootlin.com/linux/v6.9.3/source/fs/ext2/ext2.h) 里有你需要知道的一切
+
+ext2 目录文件
+
+与 FAT 本质相同：在文件上建立目录的数据结构
+注意到 inode 统一存储
+目录文件中存储文件名到 inode 编号的 key-value mapping
+
+ext2: 性能与可靠性
+
+局部性与缓存
+- bitmap, inode 都有 “集中存储” 的局部性
+- 通过内存缓存减少读/写放大
+
+大文件的随机读写性能提升明显 (O(1))
+- 支持链接 (一定程度减少空间浪费)
+- inode 在磁盘上连续存储，便于缓存/预取
+- 依然有碎片的问题
+
+但可靠性依然是个很大的问题
+- 存储 inode 的数据块损坏是很严重的
 
 ## 总结
 
