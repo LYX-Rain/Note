@@ -417,6 +417,8 @@ Windows使用可移植可执行（Portable Executable，PE）格式；Mac OS 使
 Standard binary format for object files
 目前模块采用 ELF 格式的标准格式，是以上三种文件的通用格式
 
+ELF 文件格式提供了两种不同的视角，在汇编器和链接器看来，ELF文件是由 Section Header Table 描述的一系列 Section 的集合，而执行一个ELF文件是，在加载器（Loader）看来它是由 Program Header Table 描述的一系列 Segment 的集合。
+
 One unified format for
 
 - Relocatable object files (.o)
